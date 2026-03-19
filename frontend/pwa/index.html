@@ -39,7 +39,10 @@
         </a>
         <a href="#profile" class="nav-link" data-page="profile">
           <span class="nav-avatar" id="navAvatarInitial">U</span>
-          Профиль
+          <span class="nav-user-meta">
+            <span class="nav-user-name" id="navUserName">Пользователь</span>
+            <span class="nav-verification-badge verification-badge not-verified" id="navVerificationBadge">❌ Не верифицировано</span>
+          </span>
         </a>
         <button class="nav-link nav-link-ghost" id="logoutButton">Выйти</button>
       </div>
@@ -61,11 +64,11 @@
         <p class="hero-sub">Инклюзивный городской помощник для людей с инвалидностью в Алатау</p>
 
         <div class="role-entry" aria-label="Выберите роль">
-          <button type="button" id="roleUserButton" class="role-button">Я пользователь</button>
-          <button type="button" id="roleVolunteerButton" class="role-button role-button-vol">Я волонтёр</button>
+          <a href="#signin" id="roleUserButton" class="role-button">Я пользователь</a>
+          <a href="#volunteer-signin" id="roleVolunteerButton" class="role-button role-button-vol">Я волонтёр</a>
         </div>
-        <div style="max-width:720px; margin:0 auto 10px;">
-          <button type="button" id="businessEntryButton" class="primary-button" style="width:100%;">Для бизнеса</button>
+        <div style="max-width:720px; margin:0 auto 10px; display:flex; justify-content:center;">
+          <button type="button" id="businessEntryButton" class="role-button" style="max-width:360px; width:100%;">Для бизнеса</button>
         </div>
         <div class="hero-actions">
           <a href="#navigate" class="primary-button">Открыть карту</a>
@@ -444,6 +447,7 @@
             <div class="profile-avatar" id="profileAvatar">U</div>
             <div class="profile-meta">
               <h3 id="profileDisplayName">Пользователь</h3>
+              <span id="profileVerificationBadge" class="verification-badge not-verified">❌ Не верифицировано</span>
               <span class="profile-email" id="profileDisplayEmail">user@inkomek.kz</span>
             </div>
           </div>
@@ -473,6 +477,16 @@
             <label>
               Контакт для экстренной связи
               <input id="profileEmergencyContact" type="tel" placeholder="+7 (___) ___-__-__">
+            </label>
+
+            <label class="file-upload-label">
+              Загрузить документ об инвалидности
+              <div class="file-upload-area" id="profileDocumentArea">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Нажмите или перетащите фото</span>
+                <span class="file-name" id="profileDocumentFileName"></span>
+              </div>
+              <input id="profileDocument" type="file" accept="image/*" class="sr-only">
             </label>
             <button type="submit" class="primary-button">Сохранить профиль</button>
           </form>

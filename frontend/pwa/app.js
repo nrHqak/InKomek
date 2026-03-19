@@ -137,15 +137,18 @@ function bindGlobalEvents() {
   $("hamburger").addEventListener("click", toggleMenu);
 
   // Home role entry
-  $("roleUserButton")?.addEventListener("click", () => {
+  $("roleUserButton")?.addEventListener("click", (e) => {
+    e.preventDefault();
     localStorage.setItem("inkomek-role", JSON.stringify("user"));
     // Switch back to user mode: keep only user session
     state.volunteer = null;
     localStorage.removeItem(VOLUNTEER_SESSION_KEY);
     syncVolunteerAuthUI();
-    location.hash = state.user ? "#home" : "#signin";
+    // Lead to the user login/registration flow
+    location.hash = state.user ? "#profile" : "#signin";
   });
-  $("roleVolunteerButton")?.addEventListener("click", () => {
+  $("roleVolunteerButton")?.addEventListener("click", (e) => {
+    e.preventDefault();
     localStorage.setItem("inkomek-role", JSON.stringify("volunteer"));
     location.hash = state.volunteer ? "#volunteer-home" : "#volunteer-signin";
   });
@@ -197,6 +200,17 @@ function bindGlobalEvents() {
     $("fileName").textContent = name;
     const area = $("fileUploadArea");
     if (name) area.style.borderColor = "var(--yellow)";
+  });
+
+  // Profile document upload UI
+  $("profileDocument")?.addEventListener("change", (e) => {
+    const name = e.target.files?.[0]?.name || "";
+    const file = e.target.files?.[0];
+    const fileNameEl = $("profileDocumentFileName");
+    if (fileNameEl) fileNameEl.textContent = name;
+
+    if (!file) return;
+    verifyUserDisabilityDocument(file).catch(() => {});
   });
 
   $("settingHighContrast")?.addEventListener("change", (e) => {
@@ -314,7 +328,12 @@ function handleSignIn(e) {
     return;
   }
 
+  const existingUser = loadUser();
   state.user = { name: user.name, email, phone: user.phone || "", disability: user.disability || "", emergencyContact: user.emergencyContact || "" };
+  // Preserve document verification state if it exists for this user.
+  if (existingUser && existingUser.email === email) {
+    state.user = { ...state.user, ...existingUser };
+  }
   persistUser();
   syncAuthUI();
   showStatus(statusEl, "Вы вошли!", "success");
@@ -391,11 +410,15 @@ function syncAuthUI() {
   const authBlock = document.getElementById("navAuth");
   const userBlock = document.getElementById("navUser");
   const avatarEl = document.getElementById("navAvatarInitial");
+  const navUserNameEl = document.getElementById("navUserName");
+  const navBadgeEl = document.getElementById("navVerificationBadge");
 
   if (state.user) {
     authBlock?.classList.add("hidden");
     userBlock?.classList.remove("hidden");
     if (avatarEl) avatarEl.textContent = (state.user.name || "U").charAt(0).toUpperCase();
+    if (navUserNameEl) navUserNameEl.textContent = state.user.name || "Пользователь";
+    if (navBadgeEl) applyVerificationBadgeToEl(navBadgeEl, state.user);
   } else {
     authBlock?.classList.remove("hidden");
     userBlock?.classList.add("hidden");
@@ -1431,6 +1454,131 @@ function stopVolunteerPolling() {
 }
 
 /* ═══════════════════════════════════════
+   DOCUMENT VERIFICATION (Gemini via backend)
+   ═══════════════════════════════════════ */
+const VERIFY_DOCUMENT_PATH = "/api/verify-document";
+
+function deriveVerificationUi(user) {
+  const v = user?.documentVerification;
+  if (v && typeof v.is_valid_document === "boolean") {
+    const isValid = v.is_valid_document;
+    const confidence = Number(v.confidence || 0);
+    if (!isValid) {
+      return { statusKey: "not-verified", text: "❌ Не верифицировано", className: "not-verified" };
+    }
+    if (confidence > 0.7) {
+      return { statusKey: "verified", text: "✅ Верифицирован", className: "verified" };
+    }
+    if (confidence >= 0.4 && confidence <= 0.7) {
+      return { statusKey: "under", text: "🟡 На проверке", className: "under" };
+    }
+    return { statusKey: "under", text: "🟡 На проверке", className: "under" };
+  }
+
+  // Legacy/mock fallback
+  const legacyStatus = user?.verificationStatus;
+  if (legacyStatus === "verified") return { statusKey: "verified", text: "✅ Верифицирован", className: "verified" };
+  if (legacyStatus === "under_verification" || legacyStatus === "under") {
+    return { statusKey: "under", text: "🟡 На проверке", className: "under" };
+  }
+  return { statusKey: "not-verified", text: "❌ Не верифицировано", className: "not-verified" };
+}
+
+function applyVerificationBadgeToEl(el, user) {
+  if (!el) return;
+  const ui = deriveVerificationUi(user);
+  el.classList.remove("verified", "under", "not-verified");
+  el.classList.add(ui.className);
+  el.textContent = ui.text;
+}
+
+async function verifyUserDisabilityDocument(file) {
+  if (!state.user) {
+    location.hash = "#signin";
+    return;
+  }
+
+  const profileStatusEl = document.getElementById("profileStatus");
+  const profileBadgeEl = document.getElementById("profileVerificationBadge");
+  const navBadgeEl = document.getElementById("navVerificationBadge");
+
+  // Show loading state immediately
+  const loadingUi = { statusKey: "under", text: "🟡 На проверке", className: "under" };
+  if (profileBadgeEl) {
+    profileBadgeEl.classList.remove("verified", "under", "not-verified");
+    profileBadgeEl.classList.add(loadingUi.className);
+    profileBadgeEl.textContent = loadingUi.text;
+  }
+  if (navBadgeEl) {
+    navBadgeEl.classList.remove("verified", "under", "not-verified");
+    navBadgeEl.classList.add(loadingUi.className);
+    navBadgeEl.textContent = loadingUi.text;
+  }
+  showStatus(profileStatusEl, "Проверяем документ...", "loading");
+
+  const formData = new FormData();
+  // Field name must match backend parameter name `image`.
+  formData.append("image", file);
+
+  try {
+    const res = await fetch(`${BASE_URL}${VERIFY_DOCUMENT_PATH}`, {
+      method: "POST",
+      body: formData,
+    });
+
+    const payloadText = await res.text();
+    let payload = null;
+    try {
+      payload = payloadText ? JSON.parse(payloadText) : null;
+    } catch {
+      payload = null;
+    }
+
+    if (!res.ok) {
+      const detail = payload?.reason || payload?.detail || payload?.message || payloadText || `HTTP ${res.status}`;
+      throw new Error(detail);
+    }
+
+    if (!payload || typeof payload.is_valid_document !== "boolean") {
+      throw new Error("Некорректный ответ сервера.");
+    }
+
+    state.user.documentVerification = payload;
+    state.user.verificationStatus = deriveVerificationUi(state.user).statusKey;
+    state.user.verificationConfidence = Number(payload.confidence || 0);
+    state.user.verificationReason = payload.reason || "";
+
+    persistUser();
+    syncAuthUI();
+    hydrateProfile();
+
+    const ui = deriveVerificationUi(state.user);
+    const tone = ui.statusKey === "verified" ? "success" : ui.statusKey === "not-verified" ? "error" : "loading";
+    showStatus(
+      profileStatusEl,
+      ui.statusKey === "verified"
+        ? "Документ верифицирован."
+        : ui.statusKey === "not-verified"
+          ? "Документ не верифицирован."
+          : "Документ отправлен на проверку.",
+      tone === "loading" ? "neutral" : tone
+    );
+  } catch (err) {
+    state.user.documentVerification = null;
+    state.user.verificationStatus = "not-verified";
+    persistUser();
+    syncAuthUI();
+    hydrateProfile();
+
+    const msg = err instanceof Error ? err.message : "Ошибка проверки документа.";
+    const ui = deriveVerificationUi(state.user);
+    if (profileBadgeEl) applyVerificationBadgeToEl(profileBadgeEl, state.user);
+    if (navBadgeEl) applyVerificationBadgeToEl(navBadgeEl, state.user);
+    showStatus(profileStatusEl, msg, "error");
+  }
+}
+
+/* ═══════════════════════════════════════
    PROFILE
    ═══════════════════════════════════════ */
 function hydrateProfile() {
@@ -1444,6 +1592,9 @@ function hydrateProfile() {
   document.getElementById("profileDisplayName").textContent = u.name || "Пользователь";
   document.getElementById("profileDisplayEmail").textContent = u.email || "";
   document.getElementById("profileAvatar").textContent = (u.name || "U").charAt(0).toUpperCase();
+
+  const badge = document.getElementById("profileVerificationBadge");
+  applyVerificationBadgeToEl(badge, u);
 }
 
 function handleProfileSave(e) {
@@ -1454,6 +1605,7 @@ function handleProfileSave(e) {
   state.user.phone = document.getElementById("profilePhone").value.trim();
   state.user.disability = document.getElementById("profileDisability").value;
   state.user.emergencyContact = document.getElementById("profileEmergencyContact").value.trim();
+
   persistUser();
   syncAuthUI();
   hydrateProfile();

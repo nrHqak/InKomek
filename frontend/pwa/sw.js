@@ -1,4 +1,4 @@
-const CACHE_NAME = "inkomek-pwa-v4";
+const CACHE_NAME = "inkomek-pwa-v5";
 const ASSETS = [
   "./",
   "./index.html",
