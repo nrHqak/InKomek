@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     database_url: str = Field(..., alias="DATABASE_URL")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     upload_dir: str = Field(default="backend/uploads", alias="UPLOAD_DIR")
+    ml_service_url: str = Field(default="http://127.0.0.1:8001", alias="ML_SERVICE_URL")
 
 
 @lru_cache

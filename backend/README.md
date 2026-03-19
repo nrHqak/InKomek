@@ -20,6 +20,7 @@ Set values in `.env`:
 - `DATABASE_URL`
 - `GEMINI_API_KEY` (optional)
 - `UPLOAD_DIR`
+- `ML_SERVICE_URL` (optional, default `http://127.0.0.1:8001`)
 
 `DATABASE_URL` must be psycopg driver URL, example:
 

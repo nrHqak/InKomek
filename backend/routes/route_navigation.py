@@ -32,6 +32,6 @@ async def get_route_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
-    path, segments = build_route(from_point, to_point, type)
+    path, segments = await build_route(from_point, to_point, type)
     return RouteOut(type=type, path=path, segments=segments)
 
