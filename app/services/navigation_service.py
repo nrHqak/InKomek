@@ -7,6 +7,7 @@ from typing import Literal
 import joblib
 import networkx as nx
 import osmnx as ox
+import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 
 from app.ml.navigation.feature_engineering import FEATURE_COLUMNS, extract_edge_features
@@ -37,13 +38,25 @@ class NavigationService:
 
     def _attach_predicted_weights(self) -> None:
         logger.info("Computing predicted edge weights for all user types.")
+        rows: list[dict[str, object]] = []
+        for u, v, key, edge_data in self.graph.edges(keys=True, data=True):
+            row = extract_edge_features(u, v, key, edge_data).as_dict()
+            rows.append(row)
+
+        edge_df = pd.DataFrame(rows)
+        x = edge_df[FEATURE_COLUMNS]
+
+        predictions: dict[UserType, pd.Series] = {}
         for user_type, model in self.models.items():
-            weight_key = f"weight_{user_type}"
-            for u, v, key, edge_data in self.graph.edges(keys=True, data=True):
-                row = extract_edge_features(u, v, key, edge_data)
-                x_input = [[getattr(row, col) for col in FEATURE_COLUMNS]]
-                weight = float(model.predict(x_input)[0])
-                edge_data[weight_key] = max(weight, 0.01)
+            predictions[user_type] = pd.Series(model.predict(x), index=edge_df.index)
+
+        for idx, edge_row in edge_df[["u", "v", "key"]].iterrows():
+            u = edge_row["u"]
+            v = edge_row["v"]
+            key = edge_row["key"]
+            edge_data = self.graph[u][v][key]
+            for user_type in ("wheelchair", "blind", "elderly"):
+                edge_data[f"weight_{user_type}"] = max(float(predictions[user_type].iat[idx]), 0.01)
         logger.info("Edge weight projection complete.")
 
     def navigate(
