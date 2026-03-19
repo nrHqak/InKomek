@@ -34,12 +34,19 @@
         <a href="#signup" class="nav-link nav-link-primary" data-page="signup">Регистрация</a>
       </div>
       <div class="nav-user hidden" id="navUser">
+        <a href="#user-requests" class="nav-link" data-page="user-requests">
+          Мои запросы
+        </a>
         <a href="#profile" class="nav-link" data-page="profile">
           <span class="nav-avatar" id="navAvatarInitial">U</span>
           Профиль
         </a>
         <button class="nav-link nav-link-ghost" id="logoutButton">Выйти</button>
       </div>
+
+      <a href="#volunteer-home" class="nav-link nav-volunteer-link hidden" data-page="volunteer-home">
+        Волонтёр
+      </a>
     </div>
   </nav>
 
@@ -52,6 +59,11 @@
         <img src="./assets/logo.png" alt="" class="hero-logo">
         <h1>Добро пожаловать в InKomek</h1>
         <p class="hero-sub">Инклюзивный городской помощник для людей с инвалидностью в Алатау</p>
+
+        <div class="role-entry" aria-label="Выберите роль">
+          <button type="button" id="roleUserButton" class="role-button">Я пользователь</button>
+          <button type="button" id="roleVolunteerButton" class="role-button role-button-vol">Я волонтёр</button>
+        </div>
         <div class="hero-actions">
           <a href="#navigate" class="primary-button">Открыть карту</a>
           <a href="#signup" class="secondary-button">Создать аккаунт</a>
@@ -85,6 +97,14 @@
           </div>
           <h3>Экстренная помощь</h3>
           <p>Мгновенная отправка SOS-сигнала с вашим местоположением</p>
+        </a>
+
+        <a href="#request-help" class="feature-card">
+          <div class="feature-icon feature-icon-blue">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/><path d="M12 7v5l3 3"/></svg>
+          </div>
+          <h3>Запросить помощь</h3>
+          <p>Отправьте заявку — волонтёры увидят её в своей ленте</p>
         </a>
       </div>
     </section>
@@ -181,6 +201,211 @@
         <div class="panel panel-map">
           <div id="reportMap" aria-label="Карта места репорта"></div>
           <div id="reportLocationStatus" class="status status-neutral" role="status" aria-live="polite">Определяем точку, где будет отмечена проблема.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── REQUEST HELP (USER) ──── -->
+    <section class="page hidden" id="page-request-help">
+      <div class="page-header">
+        <h2>Запросить помощь</h2>
+        <button id="refreshRequestGpsButton" class="secondary-button" type="button">Обновить GPS</button>
+      </div>
+
+      <div class="report-layout" style="grid-template-columns: 1fr;">
+        <div class="panel">
+          <form id="requestHelpForm" class="form-grid">
+            <label>
+              Тип помощи
+              <select id="requestHelpType">
+                <option value="wheelchair">Для инвалидной коляски</option>
+                <option value="blind">Для слепых / слабовидящих</option>
+                <option value="elderly">Для пожилых</option>
+                <option value="deaf">Для глухих / слабослышащих</option>
+              </select>
+            </label>
+
+            <div class="status status-neutral" id="requestHelpLocationText" aria-live="polite">
+              Определяем ваше местоположение...
+            </div>
+
+            <label>
+              Заметка (необязательно)
+              <textarea id="requestHelpNote" rows="3" placeholder="Куда нужна помощь и что важно учесть"></textarea>
+            </label>
+
+            <button id="requestHelpSubmit" type="submit" class="primary-button">Отправить запрос</button>
+          </form>
+
+          <div id="requestHelpStatus" class="status hidden" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── USER REQUESTS (VOLUNTEERS) ──── -->
+    <section class="page hidden" id="page-user-requests">
+      <div class="page-header">
+        <h2>Мои запросы помощи</h2>
+        <button id="refreshUserRequestsGpsButton" class="secondary-button" type="button">Обновить GPS</button>
+      </div>
+
+      <div class="volunteer-layout">
+        <div class="panel">
+          <h3 style="margin-bottom:10px;">Статус</h3>
+          <div id="userRequestsActiveWrap" aria-live="polite"></div>
+
+          <div style="margin-top:18px;">
+            <h3 style="margin-bottom:10px;">История</h3>
+            <div id="userRequestsList" class="requests-list" aria-live="polite"></div>
+            <div id="userRequestsEmptyState" class="status hidden" role="status" aria-live="polite">
+              Пока нет ваших запросов. <a href="#request-help" class="primary-button" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">Запросить помощь</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel panel-map">
+          <div id="userRequestsMap" aria-label="Карта волонтёрского отклика"></div>
+          <div class="map-legend">
+            <span><i class="legend-dot legend-user"></i>Вы</span>
+            <span><i class="legend-dot legend-problem"></i>Волонтёр</span>
+          </div>
+          <div id="userRequestsGpsStatus" class="status status-neutral" role="status" aria-live="polite">Ожидание GPS...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── VOLUNTEER SIGN UP ──── -->
+    <section class="page hidden" id="page-volunteer-signup">
+      <div class="page-header">
+        <h2>Регистрация волонтёра</h2>
+      </div>
+
+      <div class="report-layout" style="grid-template-columns: 1fr;">
+        <div class="panel">
+          <form id="volunteerSignupForm" class="form-grid">
+            <label>
+              ФИО полностью
+              <input id="volunteerFullName" type="text" placeholder="Например: Айдос Жанболатович" required>
+            </label>
+            <label>
+              Телефон
+              <input id="volunteerPhone" type="tel" placeholder="+7 (___) ___-__-__" required>
+            </label>
+            <label>
+              Город
+              <select id="volunteerCity" required>
+                <option value="Almaty">Алматы</option>
+                <option value="Astana">Астана</option>
+                <option value="Other">Другое</option>
+              </select>
+            </label>
+
+            <div>
+              <div style="font-weight:900; margin-bottom:10px;">Когда вы свободны</div>
+              <div class="checkbox-grid">
+                <label class="check-item">
+                  <input type="checkbox" id="availWeekdays"> Будни
+                </label>
+                <label class="check-item">
+                  <input type="checkbox" id="availWeekends"> Выходные
+                </label>
+                <label class="check-item">
+                  <input type="checkbox" id="availAlways"> Всегда
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-weight:900; margin: 16px 0 10px;">С какими людьми вы готовы помогать</div>
+              <div class="checkbox-grid">
+                <label class="check-item">
+                  <input type="checkbox" id="helpWheelchair"> Инвалидная коляска
+                </label>
+                <label class="check-item">
+                  <input type="checkbox" id="helpBlind"> Слепые / слабовидящие
+                </label>
+                <label class="check-item">
+                  <input type="checkbox" id="helpElderly"> Пожилые
+                </label>
+                <label class="check-item">
+                  <input type="checkbox" id="helpDeaf"> Глухие / слабослышащие
+                </label>
+              </div>
+            </div>
+
+            <label>
+              Район / территория в городе
+              <input id="volunteerDistrict" type="text" placeholder="Например: Алмалинский район, Алматы" required>
+            </label>
+
+            <button type="submit" id="volunteerSignupSubmit" class="primary-button">Сохранить профиль волонтёра</button>
+          </form>
+
+          <div id="volunteerSignupStatus" class="status hidden" role="status" aria-live="polite"></div>
+
+          <div class="auth-footer" style="text-align:center;">
+            <span>Уже есть профиль? <a href="#volunteer-signin">Войти</a></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── VOLUNTEER SIGN IN ──── -->
+    <section class="page hidden" id="page-volunteer-signin">
+      <div class="page-header">
+        <h2>Вход волонтёра</h2>
+      </div>
+
+      <div class="report-layout" style="grid-template-columns: 1fr;">
+        <div class="panel">
+          <form id="volunteerSigninForm" class="form-grid">
+            <label>
+              Телефон
+              <input id="volunteerSigninPhone" type="tel" placeholder="+7 (___) ___-__-__" required>
+            </label>
+            <button type="submit" class="primary-button">Войти</button>
+          </form>
+          <div id="volunteerSigninStatus" class="status hidden" role="status" aria-live="polite"></div>
+          <div class="auth-footer" style="text-align:center;">
+            <span>Нет профиля? <a href="#volunteer-signup">Регистрация</a></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── VOLUNTEER HOME ──── -->
+    <section class="page hidden" id="page-volunteer-home">
+      <div class="page-header">
+        <h2>Лента волонтёра</h2>
+        <div style="display:flex; gap:12px; align-items:center;">
+          <button id="volunteerLogoutButton" class="secondary-button" type="button">Выйти</button>
+        </div>
+      </div>
+
+      <div class="volunteer-layout">
+        <div class="panel">
+          <h3 style="margin-bottom:10px;">Статус</h3>
+          <div class="status-toggle-row" role="group" aria-label="Доступность">
+            <button id="volunteerAvailableBtn" type="button" class="toggle-btn active">Я доступен</button>
+            <button id="volunteerBusyBtn" type="button" class="toggle-btn busy">Я занят</button>
+          </div>
+
+          <div id="volunteerActiveRequest" class="hidden" style="margin-top:16px;"></div>
+
+          <div style="margin-top:18px;">
+            <h3 style="margin-bottom:10px;">Приходящие запросы</h3>
+            <div id="volunteerRequestsList" class="requests-list" aria-live="polite"></div>
+            <div id="volunteerEmptyState" class="status hidden" role="status" aria-live="polite">Запросов пока нет.</div>
+          </div>
+        </div>
+
+        <div class="panel panel-map">
+          <div id="volunteerMap" aria-label="Карта запросов волонтёра"></div>
+          <div class="map-legend">
+            <span><i class="legend-dot legend-user"></i>Вы</span>
+            <span><i class="legend-dot legend-problem"></i>Запрос</span>
+          </div>
+          <div id="volunteerGpsStatus" class="status status-neutral" role="status" aria-live="polite">Ожидание GPS...</div>
         </div>
       </div>
     </section>
