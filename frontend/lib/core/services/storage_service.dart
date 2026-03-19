@@ -26,6 +26,13 @@ class StorageService {
   bool isOnboardingComplete() =>
       _prefs.getBool('onboarding_complete') ?? false;
 
+  Future<void> setAuthToken(String token) =>
+      _prefs.setString('auth_token', token);
+
+  String getAuthToken() => _prefs.getString('auth_token') ?? '';
+
+  Future<void> clearAuthToken() => _prefs.remove('auth_token');
+
   // Settings
   Future<void> setHighContrast(bool enabled) =>
       _prefs.setBool('high_contrast', enabled);

@@ -22,6 +22,7 @@ class AppState extends ChangeNotifier {
   bool _vibrationAlerts = true;
   String _disabilityType = '';
   String _userName = '';
+  String _authToken = '';
   Position? _currentPosition;
   Timer? _gpsTimer;
   final List<Map<String, dynamic>> _gpsBuffer = [];
@@ -34,6 +35,8 @@ class AppState extends ChangeNotifier {
   bool get vibrationAlerts => _vibrationAlerts;
   String get disabilityType => _disabilityType;
   String get userName => _userName;
+  String get authToken => _authToken;
+  bool get isAuthenticated => _authToken.isNotEmpty;
   Position? get currentPosition => _currentPosition;
 
   Future<void> init() async {
@@ -46,8 +49,74 @@ class AppState extends ChangeNotifier {
     _vibrationAlerts = storageService.isVibrationAlerts();
     _disabilityType = storageService.getDisabilityType();
     _userName = storageService.getUserName();
+    _authToken = storageService.getAuthToken();
+    apiClient.setAuthToken(_authToken);
 
     _initialized = true;
+    notifyListeners();
+  }
+
+  Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+    required String typeOfDisability,
+  }) async {
+    final response = await apiClient.register(
+      name: name,
+      email: email,
+      password: password,
+      typeOfDisability: typeOfDisability,
+    );
+    final token = (response['access_token'] as String?) ?? '';
+    if (token.isEmpty) {
+      throw Exception('Register returned empty token');
+    }
+    _authToken = token;
+    apiClient.setAuthToken(token);
+    await storageService.setAuthToken(token);
+    await setDisabilityType(typeOfDisability);
+    await setUserName(name);
+    notifyListeners();
+  }
+
+  Future<void> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await apiClient.login(
+      email: email,
+      password: password,
+    );
+    final token = (response['access_token'] as String?) ?? '';
+    if (token.isEmpty) {
+      throw Exception('Login returned empty token');
+    }
+    _authToken = token;
+    apiClient.setAuthToken(token);
+    await storageService.setAuthToken(token);
+
+    try {
+      final profile = await apiClient.me();
+      final fetchedName = (profile['name'] as String?) ?? '';
+      final fetchedType = (profile['type_of_disability'] as String?) ?? '';
+      if (fetchedName.isNotEmpty) {
+        await setUserName(fetchedName);
+      }
+      if (fetchedType.isNotEmpty) {
+        await setDisabilityType(fetchedType);
+      }
+    } catch (_) {
+      // Keep token even if profile request fails; protected endpoints may still work.
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> logout() async {
+    _authToken = '';
+    apiClient.setAuthToken(null);
+    await storageService.clearAuthToken();
     notifyListeners();
   }
 

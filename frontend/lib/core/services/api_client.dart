@@ -28,6 +28,44 @@ class ApiClient {
     return headers;
   }
 
+  Future<Map<String, dynamic>> register({
+    required String name,
+    required String email,
+    required String password,
+    required String typeOfDisability,
+  }) async {
+    final response = await _post('/register', {
+      'name': name,
+      'email': email,
+      'password': password,
+      'type_of_disability': typeOfDisability,
+    });
+    return response;
+  }
+
+  Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _post('/login', {
+      'email': email,
+      'password': password,
+    });
+    return response;
+  }
+
+  Future<Map<String, dynamic>> me() async {
+    final uri = Uri.parse('$_baseUrl/me');
+    final response = await _client.get(
+      uri,
+      headers: _headers(extra: const {'Accept': 'application/json'}),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw ApiException(response.statusCode, response.body);
+  }
+
   Future<Map<String, dynamic>> navigate({
     required String userType,
     required List<double> startCoords,
