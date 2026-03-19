@@ -4,9 +4,6 @@ import json
 import re
 from typing import Any
 
-from google import genai
-from google.genai import types
-
 ALLOWED_CATEGORIES = {
     "no_ramp",
     "broken_elevator",
@@ -44,7 +41,15 @@ class AccessibilityClassificationService:
     def __init__(self, *, api_key: str, model: str) -> None:
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required.")
-        self.client = genai.Client(api_key=api_key)
+        try:
+            from google import genai as _genai
+            from google.genai import types as _types
+        except Exception as exc:
+            raise RuntimeError(
+                "google-genai package is not installed. Install it with: pip install google-genai"
+            ) from exc
+        self._types = _types
+        self.client = _genai.Client(api_key=api_key)
         self.model = model
 
     @staticmethod
@@ -93,10 +98,10 @@ class AccessibilityClassificationService:
         response = self.client.models.generate_content(
             model=self.model,
             contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                self._types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 CLASSIFICATION_PROMPT,
             ],
-            config=types.GenerateContentConfig(
+            config=self._types.GenerateContentConfig(
                 temperature=0.0,
                 response_mime_type="application/json",
             ),

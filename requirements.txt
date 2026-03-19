@@ -10,3 +10,5 @@ networkx==3.4.2
 joblib==1.4.2
 python-dotenv==1.0.1
 modal==0.74.51
+google-genai==1.31.0
+python-multipart==0.0.20
