@@ -1,0 +1,34 @@
+{
+  "feature_columns": [
+    "total_path_distance_m",
+    "straight_distance_m",
+    "displacement_ratio",
+    "elapsed_time_s",
+    "avg_speed_mps",
+    "max_speed_mps",
+    "speed_std_mps",
+    "stationary_ratio",
+    "time_stationary_s",
+    "heading_change_mean_deg",
+    "heading_change_std_deg",
+    "mean_dist_from_route_m",
+    "max_dist_from_route_m"
+  ],
+  "rows": 2050,
+  "normal_rows": 1400,
+  "anomaly_rows": 650,
+  "metrics": {
+    "accuracy": 0.9863414634146341,
+    "precision": 0.9587020648967551,
+    "recall": 1.0,
+    "f1": 0.9789156626506024,
+    "tp": 650,
+    "tn": 1372,
+    "fp": 28,
+    "fn": 0
+  },
+  "contamination": 0.18,
+  "n_estimators": 300,
+  "score_threshold": -0.0872540510593308,
+  "seed": 42
+}
