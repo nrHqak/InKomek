@@ -1,0 +1,59 @@
+name: inkomek
+description: InKomek — inclusive city platform for people with disabilities in Alatau, Kazakhstan.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Maps
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+
+  # Location
+  geolocator: ^11.0.0
+  permission_handler: ^11.3.0
+
+  # Voice
+  speech_to_text: ^6.6.0
+  flutter_tts: ^4.0.2
+
+  # Haptics
+  vibration: ^2.0.0
+
+  # Network
+  http: ^1.2.1
+  http_parser: ^4.0.2
+
+  # Storage
+  shared_preferences: ^2.2.3
+
+  # UI
+  google_fonts: ^6.1.0
+
+  # Image
+  image_picker: ^1.0.7
+
+  # State
+  provider: ^6.1.2
+
+  # Utils
+  path_provider: ^2.1.2
+  intl: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

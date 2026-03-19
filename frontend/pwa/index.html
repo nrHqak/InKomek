@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f6c12a">
+  <title>InKomek</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" href="./assets/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- ═══════════ NAVBAR ═══════════ -->
+  <nav class="navbar" id="navbar">
+    <a href="#home" class="nav-brand">
+      <img src="./assets/logo.png" alt="InKomek" class="nav-logo">
+      <span class="nav-brand-text">InKomek</span>
+    </a>
+    <button class="nav-hamburger" id="hamburger" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-links" id="navLinks">
+      <a href="#home" class="nav-link" data-page="home">Главная</a>
+      <a href="#map" class="nav-link" data-page="map">Карта</a>
+      <a href="#navigate" class="nav-link" data-page="navigate">Навигация</a>
+      <a href="#report" class="nav-link" data-page="report">Репорт</a>
+      <a href="#sos" class="nav-link nav-link-sos" data-page="sos">SOS</a>
+      <div class="nav-auth" id="navAuth">
+        <a href="#signin" class="nav-link nav-link-ghost" data-page="signin">Войти</a>
+        <a href="#signup" class="nav-link nav-link-primary" data-page="signup">Регистрация</a>
+      </div>
+      <div class="nav-user hidden" id="navUser">
+        <a href="#profile" class="nav-link" data-page="profile">
+          <span class="nav-avatar" id="navAvatarInitial">U</span>
+          Профиль
+        </a>
+        <button class="nav-link nav-link-ghost" id="logoutButton">Выйти</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════════ PAGE CONTAINER ═══════════ -->
+  <main class="page-container" id="pageContainer">
+
+    <!-- ──── HOME ──── -->
+    <section class="page" id="page-home">
+      <div class="hero">
+        <img src="./assets/logo.png" alt="" class="hero-logo">
+        <h1>Добро пожаловать в InKomek</h1>
+        <p class="hero-sub">Инклюзивный городской помощник для людей с инвалидностью в Алатау</p>
+        <div class="hero-actions">
+          <a href="#map" class="primary-button">Открыть карту</a>
+          <a href="#signup" class="secondary-button">Создать аккаунт</a>
+        </div>
+      </div>
+      <div class="features-grid">
+        <a href="#map" class="feature-card">
+          <div class="feature-icon feature-icon-blue">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <h3>Карта доступности</h3>
+          <p>Отслеживайте проблемные точки и доступные маршруты в реальном времени</p>
+        </a>
+        <a href="#navigate" class="feature-card">
+          <div class="feature-icon feature-icon-green">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          </div>
+          <h3>Навигация</h3>
+          <p>Персонализированные маршруты с учётом типа инвалидности</p>
+        </a>
+        <a href="#report" class="feature-card">
+          <div class="feature-icon feature-icon-orange">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </div>
+          <h3>Репорт проблем</h3>
+          <p>Сфотографируйте проблему — ИИ классифицирует её автоматически</p>
+        </a>
+        <a href="#sos" class="feature-card feature-card-danger">
+          <div class="feature-icon feature-icon-red">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3>Экстренная помощь</h3>
+          <p>Мгновенная отправка SOS-сигнала с вашим местоположением</p>
+        </a>
+      </div>
+    </section>
+
+    <!-- ──── MAP ──── -->
+    <section class="page hidden" id="page-map">
+      <div class="page-header">
+        <h2>Карта доступности</h2>
+        <button id="refreshLocationButton" class="secondary-button" type="button">Обновить GPS</button>
+      </div>
+      <div class="panel panel-map">
+        <div id="map" aria-label="Карта доступности"></div>
+        <div class="map-legend">
+          <span><i class="legend-dot legend-user"></i>Вы здесь</span>
+          <span><i class="legend-dot legend-route"></i>Маршрут</span>
+          <span><i class="legend-dot legend-problem"></i>Проблема</span>
+        </div>
+        <div id="gpsStatus" class="status status-neutral" role="status" aria-live="polite">Ожидание GPS...</div>
+        <div id="anomalyBanner" class="alert-banner hidden" role="alert">Обнаружена GPS-аномалия. Проверьте маршрут.</div>
+      </div>
+    </section>
+
+    <!-- ──── NAVIGATE ──── -->
+    <section class="page hidden" id="page-navigate">
+      <div class="page-header">
+        <h2>Навигация</h2>
+      </div>
+      <div class="nav-two-col">
+        <div class="panel">
+          <form id="navigationForm" class="form-grid">
+            <label>
+              Тип пользователя
+              <select id="userType" name="userType">
+                <option value="wheelchair">Инвалидная коляска</option>
+                <option value="blind">Нарушение зрения</option>
+                <option value="elderly">Пожилой возраст</option>
+              </select>
+            </label>
+            <div class="coord-row">
+              <label>
+                Широта (старт)
+                <input id="startLat" type="number" step="any" required placeholder="43.238949">
+              </label>
+              <label>
+                Долгота (старт)
+                <input id="startLon" type="number" step="any" required placeholder="76.889709">
+              </label>
+            </div>
+            <div class="coord-row">
+              <label>
+                Широта (финиш)
+                <input id="endLat" type="number" step="any" required placeholder="43.246998">
+              </label>
+              <label>
+                Долгота (финиш)
+                <input id="endLon" type="number" step="any" required placeholder="76.923778">
+              </label>
+            </div>
+            <div class="button-row">
+              <button id="useCurrentLocationButton" class="secondary-button" type="button">Моя позиция</button>
+              <button id="navigateButton" class="primary-button" type="submit">Построить маршрут</button>
+            </div>
+          </form>
+          <div id="navigationStatus" class="status status-neutral" role="status" aria-live="polite">Введите координаты маршрута.</div>
+          <div id="routeSummary" class="route-summary hidden"></div>
+        </div>
+        <div class="panel panel-map">
+          <div id="navMap" aria-label="Карта маршрута"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── REPORT ──── -->
+    <section class="page hidden" id="page-report">
+      <div class="page-header">
+        <h2>Сообщить о проблеме</h2>
+      </div>
+      <div class="report-layout">
+        <div class="panel">
+          <form id="reportForm" class="form-grid">
+            <label class="file-upload-label">
+              <div class="file-upload-area" id="fileUploadArea">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Нажмите или перетащите фото</span>
+                <span class="file-name" id="fileName"></span>
+              </div>
+              <input id="reportImage" type="file" accept="image/*" required class="sr-only">
+            </label>
+            <label>
+              Описание
+              <textarea id="reportNotes" rows="3" placeholder="Опционально: опишите проблему"></textarea>
+            </label>
+            <button id="reportButton" class="primary-button" type="submit">Классифицировать</button>
+          </form>
+          <div id="reportStatus" class="status status-neutral" role="status" aria-live="polite">Загрузите фото для анализа.</div>
+          <div id="reportResult" class="report-result hidden"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── SOS ──── -->
+    <section class="page hidden" id="page-sos">
+      <div class="sos-fullscreen">
+        <div class="sos-content">
+          <h2>Экстренная помощь</h2>
+          <p>Ваше местоположение будет отправлено вместе с сигналом SOS</p>
+          <button id="sosButton" class="sos-button" type="button">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>SOS</span>
+          </button>
+          <div id="sosStatus" class="status status-neutral" role="status" aria-live="polite">Нажмите только в экстренном случае.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── PROFILE ──── -->
+    <section class="page hidden" id="page-profile">
+      <div class="page-header">
+        <h2>Профиль</h2>
+      </div>
+      <div class="profile-layout">
+        <div class="panel">
+          <div class="profile-avatar-section">
+            <div class="profile-avatar" id="profileAvatar">U</div>
+            <div class="profile-meta">
+              <h3 id="profileDisplayName">Пользователь</h3>
+              <span class="profile-email" id="profileDisplayEmail">user@inkomek.kz</span>
+            </div>
+          </div>
+          <form id="profileForm" class="form-grid">
+            <label>
+              Имя
+              <input id="profileName" type="text" placeholder="Ваше имя">
+            </label>
+            <label>
+              Email
+              <input id="profileEmail" type="email" placeholder="email@example.com">
+            </label>
+            <label>
+              Телефон
+              <input id="profilePhone" type="tel" placeholder="+7 (___) ___-__-__">
+            </label>
+            <label>
+              Тип потребности
+              <select id="profileDisability">
+                <option value="wheelchair">Инвалидная коляска</option>
+                <option value="blind">Нарушение зрения</option>
+                <option value="elderly">Пожилой возраст</option>
+                <option value="deaf">Нарушение слуха</option>
+                <option value="other">Другое</option>
+              </select>
+            </label>
+            <label>
+              Контакт для экстренной связи
+              <input id="profileEmergencyContact" type="tel" placeholder="+7 (___) ___-__-__">
+            </label>
+            <button type="submit" class="primary-button">Сохранить профиль</button>
+          </form>
+          <div id="profileStatus" class="status hidden"></div>
+        </div>
+        <div class="panel">
+          <h3>Настройки</h3>
+          <div class="settings-list">
+            <label class="setting-row">
+              <span>Высокий контраст</span>
+              <input type="checkbox" id="settingHighContrast" class="toggle">
+            </label>
+            <label class="setting-row">
+              <span>Крупный текст</span>
+              <input type="checkbox" id="settingLargeText" class="toggle">
+            </label>
+            <label class="setting-row">
+              <span>Вибро-оповещения</span>
+              <input type="checkbox" id="settingVibration" checked class="toggle">
+            </label>
+            <label class="setting-row">
+              <span>GPS-мониторинг</span>
+              <input type="checkbox" id="settingGps" checked class="toggle">
+            </label>
+          </div>
+          <h3 style="margin-top:24px">Опасная зона</h3>
+          <button class="danger-button" id="deleteAccountButton">Удалить аккаунт</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── SIGN IN ──── -->
+    <section class="page hidden" id="page-signin">
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <img src="./assets/logo.png" alt="" class="auth-logo">
+          <h2>Вход в InKomek</h2>
+          <p class="auth-sub">Рады видеть вас снова</p>
+          <form id="signinForm" class="form-grid">
+            <label>
+              Email
+              <input id="signinEmail" type="email" required placeholder="email@example.com" autocomplete="email">
+            </label>
+            <label>
+              Пароль
+              <input id="signinPassword" type="password" required placeholder="••••••••" autocomplete="current-password" minlength="6">
+            </label>
+            <button type="submit" class="primary-button">Войти</button>
+          </form>
+          <div id="signinStatus" class="status hidden"></div>
+          <div class="auth-footer">
+            <a href="#forgot-password">Забыли пароль?</a>
+            <span>Нет аккаунта? <a href="#signup">Создать</a></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── SIGN UP ──── -->
+    <section class="page hidden" id="page-signup">
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <img src="./assets/logo.png" alt="" class="auth-logo">
+          <h2>Регистрация</h2>
+          <p class="auth-sub">Присоединяйтесь к инклюзивному сообществу</p>
+          <form id="signupForm" class="form-grid">
+            <label>
+              Имя
+              <input id="signupName" type="text" required placeholder="Ваше имя" autocomplete="name">
+            </label>
+            <label>
+              Email
+              <input id="signupEmail" type="email" required placeholder="email@example.com" autocomplete="email">
+            </label>
+            <label>
+              Телефон
+              <input id="signupPhone" type="tel" placeholder="+7 (___) ___-__-__" autocomplete="tel">
+            </label>
+            <label>
+              Тип потребности
+              <select id="signupDisability">
+                <option value="">— Выберите —</option>
+                <option value="wheelchair">Инвалидная коляска</option>
+                <option value="blind">Нарушение зрения</option>
+                <option value="elderly">Пожилой возраст</option>
+                <option value="deaf">Нарушение слуха</option>
+                <option value="other">Другое</option>
+              </select>
+            </label>
+            <label>
+              Пароль
+              <input id="signupPassword" type="password" required placeholder="Минимум 6 символов" autocomplete="new-password" minlength="6">
+            </label>
+            <label>
+              Повторите пароль
+              <input id="signupPasswordConfirm" type="password" required placeholder="••••••••" autocomplete="new-password" minlength="6">
+            </label>
+            <button type="submit" class="primary-button">Создать аккаунт</button>
+          </form>
+          <div id="signupStatus" class="status hidden"></div>
+          <div class="auth-footer">
+            <span>Уже есть аккаунт? <a href="#signin">Войти</a></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── FORGOT PASSWORD ──── -->
+    <section class="page hidden" id="page-forgot-password">
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <img src="./assets/logo.png" alt="" class="auth-logo">
+          <h2>Восстановление пароля</h2>
+          <p class="auth-sub">Введите email, и мы отправим ссылку для сброса</p>
+          <form id="forgotForm" class="form-grid">
+            <label>
+              Email
+              <input id="forgotEmail" type="email" required placeholder="email@example.com" autocomplete="email">
+            </label>
+            <button type="submit" class="primary-button">Отправить ссылку</button>
+          </form>
+          <div id="forgotStatus" class="status hidden"></div>
+          <div class="auth-footer">
+            <a href="#signin">Вернуться к входу</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="./app.js"></script>
+</body>
+</html>
