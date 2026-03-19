@@ -1,0 +1,12 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+numpy==1.26.4
+pandas==2.2.3
+scikit-learn==1.6.1
+osmnx==2.1.0
+networkx==3.4.2
+joblib==1.4.2
+python-dotenv==1.0.1
+modal==0.74.51
