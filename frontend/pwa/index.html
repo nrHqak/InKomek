@@ -166,6 +166,15 @@
           </form>
           <div id="navigationStatus" class="status status-neutral" role="status" aria-live="polite">Введите адреса старта и финиша.</div>
           <div id="routeSummary" class="route-summary hidden"></div>
+          <div id="navGuidancePanel" class="guidance-panel hidden" aria-live="polite">
+            <div class="guidance-label">Текущее указание</div>
+            <div id="navInstructionText" class="guidance-text">Ожидание маршрута...</div>
+            <div class="guidance-meta">
+              <span id="navNextDistanceText">До следующей точки: —</span>
+              <span id="navAssistModeText">Режим: —</span>
+            </div>
+            <div id="navVisualTurnCard" class="nav-visual-turn-card hidden"></div>
+          </div>
 
           <div class="business-toolbar" style="margin-top:16px;">
             <button id="businessFilterToggleButton" class="secondary-button" type="button">Показать бизнесы для ОВЗ</button>
@@ -180,7 +189,12 @@
             <span><i class="legend-dot legend-problem"></i>Проблема</span>
           </div>
           <div id="gpsStatus" class="status status-neutral" role="status" aria-live="polite">Ожидание GPS...</div>
-          <div id="anomalyBanner" class="alert-banner hidden" role="alert">Обнаружена GPS-аномалия. Проверьте маршрут.</div>
+          <div id="anomalyBanner" class="alert-banner hidden" role="alert">
+            <div class="banner-row">
+              <span id="anomalyBannerText">ИИ отправил запрос помощи</span>
+              <button id="dismissAnomalyBannerButton" type="button" class="secondary-button">Закрыть</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>

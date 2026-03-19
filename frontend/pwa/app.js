@@ -7,6 +7,7 @@ const LOCAL_USER_ID = "local_user";
 const GPS_INTERVAL_MS = 30_000;
 const DEFAULT_CENTER = [43.238949, 76.889709];
 const DEFAULT_DESTINATION = [43.246998, 76.923778];
+const ACTIVE_NAV_HISTORY_KEY = "inkomek-auto-reports";
 
 const PAGES = [
   "home",
@@ -78,6 +79,27 @@ const state = {
 
   businessRegisterPhotoDataUrl: null,
   businessEditPhotoDataUrl: null,
+
+  // Active autonomous navigation
+  activeRouteCoords: [],
+  activeRouteMeta: [],
+  activeRouteUserType: null,
+  activeRouteDisplayType: null,
+  activeRouteDestination: null,
+  activeNavRunning: false,
+  activeNavLocationTimer: null,
+  activeNavGuidanceTimer: null,
+  activeNavAnomalyTimer: null,
+  activeNavLastInstruction: "",
+  activeNavLastSpokenAt: 0,
+  activeNavProgressIndex: 0,
+  activeNavWaypointMarkers: [],
+  activeNavAuxMarkers: [],
+  activeNavArrowMarkers: [],
+  activeNavOffRouteSince: null,
+  activeNavLastAnomalyCheckAt: 0,
+  activeNavAnomalySince: null,
+  activeNavLastAnomalyResponse: null,
 };
 
 /* ═══════════════════════════════════════
@@ -99,6 +121,12 @@ function handleHashChange() {
   const raw = (location.hash || "#home").slice(1);
   let page = raw === "map" ? "navigate" : (PAGES.includes(raw) ? raw : "home");
 
+  // Authenticated users should not see the guest landing page.
+  if (page === "home" && state.user) {
+    location.hash = "#navigate";
+    return;
+  }
+
   // Volunteer guard: Лента волонтёра доступна только после входа
   if (page === "volunteer-home" && !state.volunteer) page = "volunteer-signin";
 
@@ -116,6 +144,7 @@ function handleHashChange() {
 
   if (page !== "volunteer-home") stopVolunteerPolling();
   if (page !== "user-requests") stopUserRequestsPolling();
+  if (page !== "navigate") stopActiveNavigationSession();
   if (page === "navigate") initNavMap();
   if (page === "report") initReportMap();
   if (page === "profile") hydrateProfile();
@@ -164,6 +193,9 @@ function bindGlobalEvents() {
   $("navigationForm")?.addEventListener("submit", handleNavigateSubmit);
   $("useCurrentLocationButton")?.addEventListener("click", populateStartFromCurrentLocation);
   $("refreshLocationButton")?.addEventListener("click", () => refreshCurrentLocation({ centerMap: true, silent: false }));
+  $("dismissAnomalyBannerButton")?.addEventListener("click", () => {
+    document.getElementById("anomalyBanner")?.classList.add("hidden");
+  });
   $("reportForm")?.addEventListener("submit", handleReportSubmit);
   $("sosButton")?.addEventListener("click", handleSosPress);
   $("logoutButton")?.addEventListener("click", handleLogout);
@@ -346,7 +378,14 @@ function handleSignIn(e) {
   }
 
   const existingUser = loadUser();
-  state.user = { name: user.name, email, phone: user.phone || "", disability: user.disability || "", emergencyContact: user.emergencyContact || "" };
+  state.user = {
+    name: user.name,
+    email,
+    phone: user.phone || "",
+    disability: user.disability || user.disability_type || "",
+    disability_type: user.disability_type || user.disability || "",
+    emergencyContact: user.emergencyContact || "",
+  };
   // Preserve document verification state if it exists for this user.
   if (existingUser && existingUser.email === email) {
     state.user = { ...state.user, ...existingUser };
@@ -354,7 +393,7 @@ function handleSignIn(e) {
   persistUser();
   syncAuthUI();
   showStatus(statusEl, "Вы вошли!", "success");
-  setTimeout(() => (location.hash = "#home"), 600);
+  setTimeout(() => (location.hash = "#navigate"), 600);
 }
 
 function handleSignUp(e) {
@@ -383,14 +422,14 @@ function handleSignUp(e) {
     return;
   }
 
-  stored[email] = { name, password, phone, disability };
+  stored[email] = { name, password, phone, disability, disability_type: disability };
   localStorage.setItem("inkomek-users", JSON.stringify(stored));
 
-  state.user = { name, email, phone, disability, emergencyContact: "" };
+  state.user = { name, email, phone, disability, disability_type: disability, emergencyContact: "" };
   persistUser();
   syncAuthUI();
   showStatus(statusEl, "Аккаунт создан!", "success");
-  setTimeout(() => (location.hash = "#home"), 600);
+  setTimeout(() => (location.hash = "#navigate"), 600);
 }
 
 function handleForgotPassword(e) {
@@ -1629,6 +1668,7 @@ function handleProfileSave(e) {
   state.user.name = document.getElementById("profileName").value.trim();
   state.user.phone = document.getElementById("profilePhone").value.trim();
   state.user.disability = document.getElementById("profileDisability").value;
+  state.user.disability_type = state.user.disability;
   state.user.emergencyContact = document.getElementById("profileEmergencyContact").value.trim();
 
   persistUser();
@@ -1838,15 +1878,665 @@ function biasToKazakhstan(query) {
 }
 
 /* ═══════════════════════════════════════
+   AUTONOMOUS NAVIGATION HELPERS
+   ═══════════════════════════════════════ */
+function getStoredUserProfile() {
+  try {
+    return state.user || JSON.parse(localStorage.getItem("inkomek-user") || "null") || JSON.parse(localStorage.getItem("user") || "null");
+  } catch {
+    return state.user || null;
+  }
+}
+
+function getProfileDisabilityType() {
+  const profile = getStoredUserProfile() || {};
+  return profile.disability_type || profile.disability || "";
+}
+
+function mapProfileDisabilityToRouteUserType(disabilityType) {
+  const raw = String(disabilityType || "").trim().toLowerCase();
+  if (raw === "wheelchair") return "wheelchair";
+  if (raw === "blind" || raw === "vision" || raw === "visual") return "blind";
+  if (raw === "elderly") return "elderly";
+  if (raw === "deaf") return "elderly";
+  return null;
+}
+
+function getDisplayDisabilityType(disabilityType) {
+  const raw = String(disabilityType || "").trim().toLowerCase();
+  if (["wheelchair", "blind", "elderly", "deaf"].includes(raw)) return raw;
+  return "";
+}
+
+function getNavLoopIntervalMs(displayType) {
+  return displayType === "blind" ? 3000 : 5000;
+}
+
+function shouldUseVoice(displayType) {
+  return displayType === "wheelchair" || displayType === "elderly" || displayType === "blind";
+}
+
+function shouldUseHaptics(displayType) {
+  return displayType === "deaf" || displayType === "blind";
+}
+
+function speakGuidance(text, { force = false } = {}) {
+  if (!("speechSynthesis" in window) || !text) return;
+  const now = Date.now();
+  if (!force && state.activeNavLastInstruction === text && now - state.activeNavLastSpokenAt < 8000) return;
+
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ru-RU";
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    window.speechSynthesis.speak(utter);
+    state.activeNavLastSpokenAt = now;
+    state.activeNavLastInstruction = text;
+  } catch {
+    // ignore speech synthesis failures
+  }
+}
+
+function radians(v) { return (v * Math.PI) / 180; }
+function degrees(v) { return (v * 180) / Math.PI; }
+function distanceMeters(a, b) { return haversineKm(a, b) * 1000; }
+function normalizeAngle(v) {
+  let out = v;
+  while (out > 180) out -= 360;
+  while (out < -180) out += 360;
+  return out;
+}
+
+function bearingDegrees(a, b) {
+  const [lat1, lon1] = a.map(radians);
+  const [lat2, lon2] = b.map(radians);
+  const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+  return (degrees(Math.atan2(y, x)) + 360) % 360;
+}
+
+function cardinalDirection(bearing) {
+  const dirs = ["север", "северо-восток", "восток", "юго-восток", "юг", "юго-запад", "запад", "северо-запад"];
+  return dirs[Math.round((((bearing % 360) + 360) % 360) / 45) % 8];
+}
+
+function turnDirectionFromDelta(delta) {
+  if (Math.abs(delta) < 25) return "прямо";
+  return delta > 0 ? "направо" : "налево";
+}
+
+function interpolatePoint(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+function distancePointToSegmentMeters(p, a, b) {
+  // local equirectangular approximation is good enough for city routing
+  const latScale = 111320;
+  const lonScale = Math.cos(radians((a[0] + b[0] + p[0]) / 3)) * 111320;
+  const ax = a[1] * lonScale, ay = a[0] * latScale;
+  const bx = b[1] * lonScale, by = b[0] * latScale;
+  const px = p[1] * lonScale, py = p[0] * latScale;
+  const abx = bx - ax, aby = by - ay;
+  const ab2 = abx * abx + aby * aby || 1;
+  let t = ((px - ax) * abx + (py - ay) * aby) / ab2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + abx * t, qy = ay + aby * t;
+  return Math.hypot(px - qx, py - qy);
+}
+
+function nearestRouteIndex(point, routeCoords) {
+  if (!Array.isArray(routeCoords) || !routeCoords.length) return 0;
+  let bestIdx = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < routeCoords.length; i += 1) {
+    const d = distanceMeters(point, routeCoords[i]);
+    if (d < best) {
+      best = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+function distanceToRouteMeters(point, routeCoords) {
+  if (!Array.isArray(routeCoords) || routeCoords.length < 2) return Number.POSITIVE_INFINITY;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < routeCoords.length - 1; i += 1) {
+    best = Math.min(best, distancePointToSegmentMeters(point, routeCoords[i], routeCoords[i + 1]));
+  }
+  return best;
+}
+
+function sampleRouteEvery(routeCoords, stepMeters = 30) {
+  if (!Array.isArray(routeCoords) || routeCoords.length < 2) return [];
+  const samples = [];
+  let acc = 0;
+  let nextTarget = stepMeters;
+  for (let i = 1; i < routeCoords.length; i += 1) {
+    const prev = routeCoords[i - 1];
+    const curr = routeCoords[i];
+    const seg = distanceMeters(prev, curr);
+    while (acc + seg >= nextTarget) {
+      const t = (nextTarget - acc) / seg;
+      samples.push({ location: interpolatePoint(prev, curr, t), distanceFromStart: nextTarget, number: samples.length + 1, index: i });
+      nextTarget += stepMeters;
+    }
+    acc += seg;
+  }
+  return samples;
+}
+
+function getNearbyRouteWarnings(routeCoords) {
+  const warnings = [];
+  for (const pin of state.reportPins || []) {
+    if (!pin?.location) continue;
+    const routeDistance = distanceToRouteMeters(pin.location, routeCoords);
+    if (routeDistance <= 25) {
+      warnings.push({
+        type: pin.category || "warning",
+        location: pin.location,
+        distanceToRoute: routeDistance,
+      });
+    }
+  }
+  return warnings;
+}
+
+function getTurnWaypoints(routeCoords) {
+  const turns = [];
+  if (!Array.isArray(routeCoords) || routeCoords.length < 3) return turns;
+  for (let i = 1; i < routeCoords.length - 1; i += 1) {
+    const b1 = bearingDegrees(routeCoords[i - 1], routeCoords[i]);
+    const b2 = bearingDegrees(routeCoords[i], routeCoords[i + 1]);
+    const delta = normalizeAngle(b2 - b1);
+    if (Math.abs(delta) >= 28) {
+      turns.push({
+        index: i,
+        location: routeCoords[i],
+        delta,
+        direction: turnDirectionFromDelta(delta),
+        bearing: b2,
+      });
+    }
+  }
+  return turns;
+}
+
+function getRouteBounds(routeCoords) {
+  const lats = routeCoords.map((p) => p[0]);
+  const lons = routeCoords.map((p) => p[1]);
+  return {
+    south: Math.min(...lats) - 0.002,
+    north: Math.max(...lats) + 0.002,
+    west: Math.min(...lons) - 0.002,
+    east: Math.max(...lons) + 0.002,
+  };
+}
+
+async function fetchRouteContextFromOsm(routeCoords) {
+  try {
+    const { south, west, north, east } = getRouteBounds(routeCoords);
+    const query = `[out:json][timeout:15];(node["amenity"="bench"](${south},${west},${north},${east});node["highway"="steps"](${south},${west},${north},${east});way["highway"="steps"](${south},${west},${north},${east}););out center;`;
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: query,
+    });
+    if (!res.ok) return { benches: [], stairs: [] };
+    const payload = await res.json();
+    const benches = [];
+    const stairs = [];
+    for (const el of payload.elements || []) {
+      const point = Number.isFinite(el.lat) && Number.isFinite(el.lon)
+        ? [Number(el.lat), Number(el.lon)]
+        : Number.isFinite(el.center?.lat) && Number.isFinite(el.center?.lon)
+          ? [Number(el.center.lat), Number(el.center.lon)]
+          : null;
+      if (!point) continue;
+      if (distanceToRouteMeters(point, routeCoords) > 35) continue;
+      if (el.tags?.amenity === "bench") benches.push(point);
+      if (el.tags?.highway === "steps") stairs.push(point);
+    }
+    return { benches, stairs };
+  } catch {
+    return { benches: [], stairs: [] };
+  }
+}
+
+function createArrowDivIcon(direction) {
+  const arrow = direction === "направо" ? "→" : direction === "налево" ? "←" : "↑";
+  return L.divIcon({
+    html: `<div style="width:32px;height:32px;border-radius:999px;background:#7e57c2;color:white;display:flex;align-items:center;justify-content:center;font-weight:1000;border:2px solid white;box-shadow:0 10px 24px rgba(126,87,194,0.25)">${arrow}</div>`,
+    className: "",
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
+function createNumberDivIcon(number) {
+  return L.divIcon({
+    html: `<div style="width:32px;height:32px;border-radius:999px;background:#fb8c00;color:white;display:flex;align-items:center;justify-content:center;font-weight:1000;border:2px solid white;box-shadow:0 10px 24px rgba(251,140,0,0.25)">${number}</div>`,
+    className: "",
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
+function clearActiveRouteDecorations() {
+  for (const marker of state.activeNavWaypointMarkers || []) marker.remove?.();
+  for (const marker of state.activeNavAuxMarkers || []) marker.remove?.();
+  for (const marker of state.activeNavArrowMarkers || []) marker.remove?.();
+  state.activeNavWaypointMarkers = [];
+  state.activeNavAuxMarkers = [];
+  state.activeNavArrowMarkers = [];
+}
+
+function renderAdaptiveRouteDecorations(displayType, routeCoords, routeMeta, osmContext) {
+  clearActiveRouteDecorations();
+  const mapInstance = state.navMap;
+  if (!mapInstance) return;
+
+  if (displayType === "blind") {
+    for (const wp of routeMeta.numberedWaypoints || []) {
+      const m = L.marker(wp.location, { icon: createNumberDivIcon(wp.number) }).addTo(mapInstance).bindPopup(`Точка ${wp.number}`);
+      state.activeNavWaypointMarkers.push(m);
+    }
+  }
+
+  if (displayType === "deaf") {
+    for (const turn of routeMeta.turns || []) {
+      const m = L.marker(turn.location, { icon: createArrowDivIcon(turn.direction) }).addTo(mapInstance).bindPopup(`Поворот ${turn.direction}`);
+      state.activeNavArrowMarkers.push(m);
+    }
+  }
+
+  if (displayType === "elderly") {
+    for (const bench of osmContext.benches || []) {
+      const m = L.circleMarker(bench, { radius: 7, color: "#2e7d32", fillColor: "#66bb6a", fillOpacity: 0.95, weight: 2 }).addTo(mapInstance).bindPopup("Точка отдыха / скамейка");
+      state.activeNavAuxMarkers.push(m);
+    }
+    for (const steps of osmContext.stairs || []) {
+      const m = L.circleMarker(steps, { radius: 8, color: "#a84300", fillColor: "#ffb74d", fillOpacity: 0.95, weight: 2 }).addTo(mapInstance).bindPopup("Лестница рядом с маршрутом");
+      state.activeNavAuxMarkers.push(m);
+    }
+  }
+
+  if (displayType === "wheelchair") {
+    for (const warning of routeMeta.warnings || []) {
+      const m = L.circleMarker(warning.location, { radius: 8, color: "#0d47a1", fillColor: "#42a5f5", fillOpacity: 0.98, weight: 2 }).addTo(mapInstance).bindPopup(`Предупреждение: ${warning.type}`);
+      state.activeNavAuxMarkers.push(m);
+    }
+    for (const steps of osmContext.stairs || []) {
+      const m = L.circleMarker(steps, { radius: 8, color: "#8f1414", fillColor: "#ef5350", fillOpacity: 0.98, weight: 2 }).addTo(mapInstance).bindPopup("Перепад / ступени рядом");
+      state.activeNavAuxMarkers.push(m);
+    }
+  }
+}
+
+function setGuidanceUi(instructionText, nextDistanceText, modeText, visualTurnText = "", showVisualTurn = false) {
+  const panel = document.getElementById("navGuidancePanel");
+  const instructionEl = document.getElementById("navInstructionText");
+  const nextEl = document.getElementById("navNextDistanceText");
+  const modeEl = document.getElementById("navAssistModeText");
+  const visualEl = document.getElementById("navVisualTurnCard");
+  if (panel) panel.classList.remove("hidden");
+  if (instructionEl) instructionEl.textContent = instructionText;
+  if (nextEl) nextEl.textContent = nextDistanceText;
+  if (modeEl) modeEl.textContent = modeText;
+  if (visualEl) {
+    visualEl.textContent = visualTurnText;
+    visualEl.classList.toggle("hidden", !showVisualTurn);
+  }
+}
+
+function setDeafVisualInstruction(text) {
+  setGuidanceUi(text, document.getElementById("navNextDistanceText")?.textContent || "До следующей точки: —", "Режим: визуальный + вибро", text, true);
+}
+
+function getModeText(displayType) {
+  if (displayType === "blind") return "Режим: голос + вибро";
+  if (displayType === "deaf") return "Режим: визуальный + вибро";
+  if (displayType === "elderly") return "Режим: голосовой";
+  if (displayType === "wheelchair") return "Режим: голосовой";
+  return "Режим: —";
+}
+
+function loadAutoReportsHistory() {
+  try { return JSON.parse(localStorage.getItem(ACTIVE_NAV_HISTORY_KEY) || "[]"); } catch { return []; }
+}
+
+function persistAutoReportsHistory(list) {
+  localStorage.setItem(ACTIVE_NAV_HISTORY_KEY, JSON.stringify(list));
+}
+
+function addAutoReportToHistory(report) {
+  const list = loadAutoReportsHistory();
+  list.unshift(report);
+  persistAutoReportsHistory(list.slice(0, 100));
+}
+
+async function postNavigateWithFallback(payload) {
+  try {
+    return await fetchJson("/api/navigate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return fetchJson("/navigate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
+async function postGpsCheckWithFallback(payload) {
+  try {
+    return await fetchJson("/api/gps/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return fetchJson("/gps/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
+async function postAlertWithFallback(payload) {
+  try {
+    return await fetchJson("/api/alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return fetchJson("/alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
+async function refreshActiveNavigationLocation({ centerMap = false } = {}) {
+  const point = await refreshCurrentLocation({ centerMap, silent: true });
+  if (!point) return null;
+  const gpsStatusEl = document.getElementById("gpsStatus");
+  if (gpsStatusEl) {
+    const prefix = state.currentAddress ? `Адрес: ${state.currentAddress}. ` : "";
+    showStatus(gpsStatusEl, `${prefix}Автономная навигация активна.`, "success");
+  }
+  return point;
+}
+
+function renderArrivalState(displayType) {
+  const text = "Вы прибыли";
+  setGuidanceUi(text, "До следующей точки: 0 м", getModeText(displayType), displayType === "deaf" ? "Прибыли" : "", displayType === "deaf");
+  if (shouldUseVoice(displayType)) speakGuidance(text, { force: true });
+  if (shouldUseHaptics(displayType)) vibrate([500, 200, 500, 200, 500]);
+}
+
+function getActiveDangerAhead(currentPoint) {
+  return (state.activeRouteMeta?.warnings || []).find((warning) => distanceMeters(currentPoint, warning.location) <= 30) || null;
+}
+
+function generateGuidanceInstruction(currentPoint) {
+  const routeCoords = state.activeRouteCoords || [];
+  const displayType = state.activeRouteDisplayType;
+  if (!routeCoords.length || !currentPoint) return null;
+
+  const destination = routeCoords[routeCoords.length - 1];
+  const distanceToDestination = distanceMeters(currentPoint, destination);
+  if (distanceToDestination <= 18) {
+    return {
+      text: "Вы прибыли",
+      arrived: true,
+      nextDistanceText: "До следующей точки: 0 м",
+      visualTurnText: "Прибыли",
+      dangerAhead: false,
+    };
+  }
+
+  const nearestIdx = nearestRouteIndex(currentPoint, routeCoords);
+  state.activeNavProgressIndex = Math.max(state.activeNavProgressIndex || 0, nearestIdx);
+  const routeDistance = distanceToRouteMeters(currentPoint, routeCoords);
+  const offRouteThreshold = displayType === "blind" ? 18 : displayType === "wheelchair" ? 22 : 28;
+  const isOffRoute = routeDistance > offRouteThreshold;
+  if (isOffRoute) {
+    return {
+      text: "Вы отклонились от маршрута",
+      offRoute: true,
+      nextDistanceText: `Отклонение: ${Math.round(routeDistance)} м`,
+      visualTurnText: "Отклонение от маршрута",
+      dangerAhead: false,
+    };
+  }
+
+  const turns = state.activeRouteMeta.turns || [];
+  const nextTurn = turns.find((t) => t.index > state.activeNavProgressIndex);
+  const distanceToTurn = nextTurn ? distanceMeters(currentPoint, nextTurn.location) : distanceToDestination;
+  const nextSegmentTarget = nextTurn?.location || destination;
+  const bearing = bearingDegrees(currentPoint, nextSegmentTarget);
+  const directionText = nextTurn?.direction || "прямо";
+  const dangerAhead = !!getActiveDangerAhead(currentPoint);
+
+  if (displayType === "wheelchair") {
+    const warning = (state.activeRouteMeta.warnings || []).find((w) => distanceMeters(currentPoint, w.location) <= 45);
+    const extra = warning ? ` Впереди предупреждение: ${warning.type}, проверьте покрытие и возможный уклон.` : "";
+    const text = nextTurn && distanceToTurn <= 55
+      ? `Через ${Math.max(5, Math.round(distanceToTurn))} метров поверните ${directionText}.${extra}`
+      : `Двигайтесь прямо ${Math.max(5, Math.round(distanceToTurn))} метров.${extra}`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+  }
+
+  if (displayType === "elderly") {
+    const benchesAhead = (state.activeRouteMeta.benches || []).find((p) => distanceMeters(currentPoint, p) <= 80);
+    const minutes = Math.max(1, Math.round(distanceToTurn / 60));
+    const benchText = benchesAhead ? ` До скамейки около ${Math.round(distanceMeters(currentPoint, benchesAhead))} м.` : "";
+    const text = nextTurn && distanceToTurn <= 55
+      ? `Через ${Math.round(distanceToTurn)} метров поверните ${directionText}. Время до точки: ${minutes} мин.${benchText}`
+      : `Идите ещё ${Math.round(distanceToTurn)} метров. Время до точки: ${minutes} мин.${benchText}`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+  }
+
+  if (displayType === "blind") {
+    const steps = Math.max(5, Math.round(distanceToTurn / 0.75));
+    const cardinal = cardinalDirection(bearing);
+    const text = nextTurn && distanceToTurn <= 45
+      ? `Через ${Math.round(distanceToTurn)} метров поверните ${directionText}, ориентир на ${cardinal}. Это около ${steps} шагов.`
+      : `Идите на ${cardinal}, около ${steps} шагов до следующей точки.`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+  }
+
+  if (displayType === "deaf") {
+    const text = nextTurn && distanceToTurn <= 55
+      ? `Через ${Math.round(distanceToTurn)} м: ${directionText}`
+      : `Прямо ${Math.round(distanceToTurn)} м`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: text, dangerAhead };
+  }
+
+  return { text: "Следуйте по маршруту", nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+}
+
+function applyHapticGuidance(instruction) {
+  const displayType = state.activeRouteDisplayType;
+  if (!shouldUseHaptics(displayType) || !instruction) return;
+  if (instruction.arrived) { vibrate([500, 200, 500, 200, 500]); return; }
+  if (instruction.offRoute) { vibrate([1000]); return; }
+  if (instruction.dangerAhead) { vibrate([200, 100, 200, 100, 200, 100, 200]); return; }
+  const lower = String(instruction.text || "").toLowerCase();
+  if (lower.includes("направо")) { vibrate([100, 50, 100, 50, 100]); return; }
+  if (lower.includes("налево")) { vibrate([300, 50, 300]); return; }
+  const now = Date.now();
+  if (!state.activeNavLastStraightPulseAt || now - state.activeNavLastStraightPulseAt >= 10000) {
+    vibrate([200]);
+    state.activeNavLastStraightPulseAt = now;
+  }
+}
+
+function runGuidanceCycle() {
+  if (!state.activeNavRunning || !state.currentLocation) return;
+  const displayType = state.activeRouteDisplayType;
+  const instruction = generateGuidanceInstruction(state.currentLocation);
+  if (!instruction) return;
+
+  if (instruction.arrived) {
+    renderArrivalState(displayType);
+    stopActiveNavigationSession({ keepRoute: true });
+    return;
+  }
+
+  setGuidanceUi(instruction.text, instruction.nextDistanceText, getModeText(displayType), instruction.visualTurnText, displayType === "deaf");
+  if (displayType === "deaf") setDeafVisualInstruction(instruction.visualTurnText || instruction.text);
+  if (shouldUseVoice(displayType)) speakGuidance(instruction.text);
+  if (shouldUseHaptics(displayType)) applyHapticGuidance(instruction);
+}
+
+async function triggerAutoAnomalyReport(response) {
+  const displayType = state.activeRouteDisplayType || getDisplayDisabilityType(getProfileDisabilityType());
+  const disabilityType = getProfileDisabilityType();
+  const location = state.currentLocation || response?.location || DEFAULT_CENTER;
+  vibrate([500, 200, 500]);
+  if (displayType !== "deaf" && displayType !== "blind") {
+    speakGuidance("Обнаружена проблема, отправляю запрос помощи", { force: true });
+  }
+
+  try {
+    await postAlertWithFallback({
+      user_id: LOCAL_USER_ID,
+      location,
+      type: "auto_anomaly",
+      disability_type: disabilityType,
+    });
+  } catch {
+    // Keep local flow even if alert backend is unavailable.
+  }
+
+  addProblemPin({
+    location,
+    category: "auto_anomaly",
+    confidence: 1,
+    notes: `Авто-репорт ИИ: ${response?.anomaly_type || "anomaly"}`,
+  });
+
+  const banner = document.getElementById("anomalyBanner");
+  const bannerText = document.getElementById("anomalyBannerText");
+  if (bannerText) bannerText.textContent = "ИИ отправил запрос помощи";
+  banner?.classList.remove("hidden");
+
+  addAutoReportToHistory({
+    createdAt: Date.now(),
+    location,
+    anomaly_type: response?.anomaly_type || "unknown",
+    disability_type: disabilityType,
+    type: "auto_anomaly",
+  });
+}
+
+async function runActiveAnomalyCheckCycle() {
+  if (!state.activeNavRunning || state.gpsPoints.length < 6) return;
+  try {
+    const response = await postGpsCheckWithFallback({
+      user_id: LOCAL_USER_ID,
+      points: state.gpsPoints.slice(-6),
+    });
+    state.activeNavLastAnomalyResponse = response;
+    const now = Date.now();
+    if (response.is_anomaly) {
+      if (!state.activeNavAnomalySince) {
+        state.activeNavAnomalySince = now;
+        return;
+      }
+      if (now - state.activeNavAnomalySince >= 15000) {
+        await triggerAutoAnomalyReport(response);
+        state.activeNavAnomalySince = now + 30000;
+      }
+    } else {
+      state.activeNavAnomalySince = null;
+      document.getElementById("anomalyBanner")?.classList.add("hidden");
+    }
+  } catch {
+    // Non-fatal during active navigation
+  }
+}
+
+function stopActiveNavigationSession({ keepRoute = false } = {}) {
+  if (state.activeNavLocationTimer) { clearInterval(state.activeNavLocationTimer); state.activeNavLocationTimer = null; }
+  if (state.activeNavGuidanceTimer) { clearInterval(state.activeNavGuidanceTimer); state.activeNavGuidanceTimer = null; }
+  if (state.activeNavAnomalyTimer) { clearInterval(state.activeNavAnomalyTimer); state.activeNavAnomalyTimer = null; }
+  state.activeNavRunning = false;
+  state.activeNavLastInstruction = "";
+  state.activeNavLastSpokenAt = 0;
+  state.activeNavProgressIndex = 0;
+  state.activeNavOffRouteSince = null;
+  state.activeNavAnomalySince = null;
+  if ("speechSynthesis" in window) {
+    try { window.speechSynthesis.cancel(); } catch {}
+  }
+  document.getElementById("anomalyBanner")?.classList.add("hidden");
+  if (!keepRoute) {
+    const panel = document.getElementById("navGuidancePanel");
+    panel?.classList.add("hidden");
+    clearActiveRouteDecorations();
+  }
+}
+
+async function startActiveNavigationSession(routeCoords, { displayType, destinationAddress = "" } = {}) {
+  stopActiveNavigationSession({ keepRoute: true });
+  state.activeNavRunning = true;
+  state.activeRouteCoords = routeCoords;
+  state.activeRouteDisplayType = displayType;
+  state.activeRouteDestination = destinationAddress || "";
+  state.activeRouteMeta = {
+    turns: getTurnWaypoints(routeCoords),
+    warnings: getNearbyRouteWarnings(routeCoords),
+    numberedWaypoints: displayType === "blind" ? sampleRouteEvery(routeCoords, 30) : [],
+    benches: [],
+    stairs: [],
+  };
+
+  const osmContext = await fetchRouteContextFromOsm(routeCoords);
+  state.activeRouteMeta.benches = osmContext.benches;
+  state.activeRouteMeta.stairs = osmContext.stairs;
+  renderAdaptiveRouteDecorations(displayType, routeCoords, state.activeRouteMeta, osmContext);
+
+  const intervalMs = getNavLoopIntervalMs(displayType);
+  await refreshActiveNavigationLocation({ centerMap: false });
+  runGuidanceCycle();
+  runActiveAnomalyCheckCycle();
+  state.activeNavLocationTimer = window.setInterval(() => {
+    refreshActiveNavigationLocation({ centerMap: false });
+  }, intervalMs);
+  state.activeNavGuidanceTimer = window.setInterval(runGuidanceCycle, intervalMs);
+  state.activeNavAnomalyTimer = window.setInterval(runActiveAnomalyCheckCycle, 10000);
+}
+
+/* ═══════════════════════════════════════
    NAVIGATION (POST /navigate)
    ═══════════════════════════════════════ */
 async function handleNavigateSubmit(e) {
   e.preventDefault();
   const $ = (id) => document.getElementById(id);
-
-  const userType = $("userType").value;
   const statusEl = $("navigationStatus");
   const btn = $("navigateButton");
+  const profileDisability = getProfileDisabilityType();
+  const routeUserType = mapProfileDisabilityToRouteUserType(profileDisability);
+  const displayType = getDisplayDisabilityType(profileDisability);
+
+  if (!routeUserType || !displayType) {
+    showStatus(statusEl, "Сначала заполните тип инвалидности в профиле перед построением маршрута.", "error");
+    location.hash = "#profile";
+    return;
+  }
+
+  if ($("userType")) $("userType").value = routeUserType;
 
   let start = [Number($("startLat").value), Number($("startLon").value)];
   let end = [Number($("endLat").value), Number($("endLon").value)];
@@ -1879,21 +2569,26 @@ async function handleNavigateSubmit(e) {
     return;
   }
 
-  localStorage.setItem("inkomek-user-type", userType);
+  localStorage.setItem("inkomek-user-type", routeUserType);
   setLoading(btn, true, "Загрузка...");
   showStatus(statusEl, "Запрашиваем доступный маршрут...", "loading");
 
   try {
-    const response = await fetchJson("/navigate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_type: userType, start_coords: start, end_coords: end }),
+    const response = await postNavigateWithFallback({
+      user_type: routeUserType,
+      start_coords: start,
+      end_coords: end,
     });
 
-    drawRoute(response.route_coords || []);
+    await drawRoute(response.route_coords || [], { displayType });
     renderRouteSummary(response.summary || null);
-    showStatus(statusEl, "Маршрут построен.", "success");
+    await startActiveNavigationSession(response.route_coords || [], {
+      displayType,
+      destinationAddress: $("endAddress")?.value.trim() || "",
+    });
+    showStatus(statusEl, "Маршрут построен. Автономное сопровождение активно.", "success");
   } catch (error) {
+    stopActiveNavigationSession();
     clearRoute();
     renderRouteSummary(null);
     showStatus(statusEl, extractError(error, "Не удалось построить маршрут."), "error");
@@ -1902,13 +2597,18 @@ async function handleNavigateSubmit(e) {
   }
 }
 
-function drawRoute(routeCoords) {
+async function drawRoute(routeCoords, { displayType } = {}) {
   clearRoute();
   const mapInstance = state.navMap;
   if (!mapInstance || !Array.isArray(routeCoords) || routeCoords.length === 0) return;
 
   const latLngs = routeCoords.map((p) => [Number(p[0]), Number(p[1])]);
-  state.routeLine = L.polyline(latLngs, { color: "#216e39", weight: 6, opacity: 0.9 }).addTo(mapInstance);
+  let lineStyle = { color: "#216e39", weight: 6, opacity: 0.9 };
+  if (displayType === "wheelchair") lineStyle = { color: "#1565c0", weight: 8, opacity: 0.95 };
+  if (displayType === "blind") lineStyle = { color: "#fb8c00", weight: 7, opacity: 0.95, dashArray: "10 6" };
+  if (displayType === "elderly") lineStyle = { color: "#2e7d32", weight: 7, opacity: 0.95 };
+  if (displayType === "deaf") lineStyle = { color: "#7e57c2", weight: 7, opacity: 0.95 };
+  state.routeLine = L.polyline(latLngs, lineStyle).addTo(mapInstance);
   state.routeMarkers.push(
     L.marker(latLngs[0]).addTo(mapInstance).bindPopup("Старт"),
     L.marker(latLngs[latLngs.length - 1]).addTo(mapInstance).bindPopup("Финиш"),
@@ -1922,6 +2622,11 @@ function clearRoute() {
   state.routeLine = null;
   for (const m of state.routeMarkers) { if (mapInstance) mapInstance.removeLayer(m); }
   state.routeMarkers = [];
+  clearActiveRouteDecorations();
+  state.activeRouteCoords = [];
+  state.activeRouteMeta = {};
+  state.activeRouteUserType = null;
+  state.activeRouteDisplayType = null;
 }
 
 function renderRouteSummary(summary) {
@@ -1935,7 +2640,8 @@ function renderRouteSummary(summary) {
     <div><strong>Узлов</strong> ${summary.node_count ?? "-"}</div>
     <div><strong>Рёбер</strong> ${summary.edge_count ?? "-"}</div>
   </div>`;
-  el.classList.remove("hidden");
+  // Keep summary available, but active guidance UI is primary during navigation.
+  el.classList.add("hidden");
 }
 
 /* ═══════════════════════════════════════
@@ -2063,6 +2769,7 @@ function stopGpsPolling() {
 }
 
 async function runGpsCheckCycle() {
+  if (state.activeNavRunning) return;
   const point = await refreshCurrentLocation({ centerMap: false, silent: true });
   if (!point) return;
 
