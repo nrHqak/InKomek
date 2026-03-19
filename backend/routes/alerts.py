@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from models.schemas import AlertCreateRequest, AlertOut
+from models.schemas import AlertCreateRequest, AlertOut, Coordinates
 from services.alerts_service import create_alert, get_alerts
 from services.dependencies import get_current_user, get_db
 from services.ml_anomaly_service import detect_anomaly
 
 router = APIRouter()
+
+
+class LegacyAlertRequest(BaseModel):
+    user_id: str | None = None
+    location: list[float] = Field(..., min_length=2, max_length=2)
+    type: str = Field(..., min_length=1, max_length=120)
 
 
 @router.post("/alerts", response_model=AlertOut, status_code=status.HTTP_201_CREATED)
@@ -30,6 +37,24 @@ async def create_alert_endpoint(
         message=message,
         location=payload.location,
         user_id=target_user_id,
+    )
+    return AlertOut(**data)
+
+
+@router.post("/alert", response_model=AlertOut, status_code=status.HTTP_201_CREATED)
+async def create_alert_legacy_endpoint(
+    payload: LegacyAlertRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AlertOut:
+    # Backward-compatible endpoint for old frontend payload format.
+    lat, lng = float(payload.location[0]), float(payload.location[1])
+    data = create_alert(
+        db=db,
+        alert_type=payload.type,
+        message="Legacy alert request",
+        location=Coordinates(lat=lat, lng=lng),
+        user_id=payload.user_id or str(current_user["id"]),
     )
     return AlertOut(**data)
 

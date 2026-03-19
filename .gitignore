@@ -1,7 +1,11 @@
 .idea/
 venv/
+venv311/
 backend/venv/
 backend/.env
 backend/uploads/
+artifacts/
+cache/
 __pycache__/
+app/**/__pycache__/
 *.pyc

@@ -7,10 +7,26 @@ import '../constants/api_endpoints.dart';
 class ApiClient {
   final http.Client _client;
   final String _baseUrl;
+  String? _authToken;
 
   ApiClient({http.Client? client, String? baseUrl})
       : _client = client ?? http.Client(),
         _baseUrl = baseUrl ?? ApiEndpoints.baseUrl;
+
+  void setAuthToken(String? token) {
+    _authToken = token;
+  }
+
+  Map<String, String> _headers({Map<String, String>? extra}) {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (_authToken != null && _authToken!.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $_authToken';
+    }
+    if (extra != null) {
+      headers.addAll(extra);
+    }
+    return headers;
+  }
 
   Future<Map<String, dynamic>> navigate({
     required String userType,
@@ -52,6 +68,9 @@ class ApiClient {
   Future<Map<String, dynamic>> classifyImage(File imageFile) async {
     final uri = Uri.parse('$_baseUrl${ApiEndpoints.classify}');
     final request = http.MultipartRequest('POST', uri);
+    if (_authToken != null && _authToken!.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $_authToken';
+    }
 
     final extension = imageFile.path.split('.').last.toLowerCase();
     final mimeType = extension == 'png' ? 'image/png' : 'image/jpeg';
@@ -90,7 +109,7 @@ class ApiClient {
     final uri = Uri.parse('$_baseUrl$endpoint');
     final response = await _client.post(
       uri,
-      headers: {'Content-Type': 'application/json'},
+      headers: _headers(),
       body: jsonEncode(body),
     );
 
