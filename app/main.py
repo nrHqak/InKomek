@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.alert import router as alert_router
 from app.api.classification import router as classification_router
 from app.api.gps import router as gps_router
 from app.api.navigation import router as navigation_router
@@ -32,6 +33,7 @@ app.add_middleware(
 app.include_router(navigation_router)
 app.include_router(gps_router)
 app.include_router(classification_router)
+app.include_router(alert_router)
 
 _navigation_service: NavigationService | None = None
 _gps_service: GPSAnomalyService | None = None

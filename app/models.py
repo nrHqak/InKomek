@@ -95,3 +95,26 @@ class AccessibilityClassificationResponse(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     description: str = Field(min_length=1, max_length=300)
     model: str
+
+
+class AlertRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=128)
+    location: tuple[float, float] = Field(description="(latitude, longitude)")
+    type: str = Field(min_length=1, max_length=120)
+
+    @field_validator("location")
+    @classmethod
+    def validate_location(cls, value: tuple[float, float]) -> tuple[float, float]:
+        lat, lon = value
+        if not (-90.0 <= lat <= 90.0):
+            raise ValueError("Latitude must be between -90 and 90.")
+        if not (-180.0 <= lon <= 180.0):
+            raise ValueError("Longitude must be between -180 and 180.")
+        return value
+
+
+class AlertResponse(BaseModel):
+    status: Literal["ok"]
+    user_id: str
+    alert_type: str
+    location: tuple[float, float]
