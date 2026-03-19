@@ -21,6 +21,13 @@ class Settings(BaseSettings):
 
     osmnx_network_type: str = Field(default="walk", alias="OSMNX_NETWORK_TYPE")
     overpass_rate_limit: bool = Field(default=True, alias="OVERPASS_RATE_LIMIT")
+    gps_model_file: Path = Field(default=Path("artifacts/models/gps/isolation_forest.joblib"), alias="GPS_MODEL_FILE")
+    gps_metadata_file: Path = Field(
+        default=Path("artifacts/models/gps/isolation_forest_metadata.json"),
+        alias="GPS_METADATA_FILE",
+    )
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
 
 
 @lru_cache(maxsize=1)
