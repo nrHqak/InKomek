@@ -2,13 +2,14 @@
    CONSTANTS
    ═══════════════════════════════════════ */
 const BASE_URL = "http://localhost:61749";
+const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const LOCAL_USER_ID = "local_user";
 const GPS_INTERVAL_MS = 30_000;
 const DEFAULT_CENTER = [43.238949, 76.889709];
 const DEFAULT_DESTINATION = [43.246998, 76.923778];
 
 const PAGES = [
-  "home", "map", "navigate", "report", "sos",
+  "home", "navigate", "report", "sos",
   "profile", "signin", "signup", "forgot-password",
 ];
 
@@ -18,6 +19,7 @@ const PAGES = [
 const state = {
   currentPage: "home",
   currentLocation: null,
+  currentAddress: "",
   gpsPoints: [],
   reportPins: loadStoredPins(),
   reportMarkers: [],
@@ -25,9 +27,12 @@ const state = {
   routeMarkers: [],
   userMarker: null,
   gpsTimer: null,
-  leafletMap: null,
   navMap: null,
+  reportMap: null,
   user: loadUser(),
+  navUserMarker: null,
+  reportUserMarker: null,
+  reportIssueMarker: null,
 };
 
 /* ═══════════════════════════════════════
@@ -46,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
    ═══════════════════════════════════════ */
 function handleHashChange() {
   const raw = (location.hash || "#home").slice(1);
-  const page = PAGES.includes(raw) ? raw : "home";
+  const page = raw === "map" ? "navigate" : (PAGES.includes(raw) ? raw : "home");
 
   for (const p of PAGES) {
     const el = document.getElementById(`page-${p}`);
@@ -60,8 +65,8 @@ function handleHashChange() {
   closeMenu();
   state.currentPage = page;
 
-  if (page === "map") initMainMap();
   if (page === "navigate") initNavMap();
+  if (page === "report") initReportMap();
   if (page === "profile") hydrateProfile();
 
   window.scrollTo({ top: 0 });
@@ -86,6 +91,22 @@ function bindGlobalEvents() {
   $("forgotForm")?.addEventListener("submit", handleForgotPassword);
   $("profileForm")?.addEventListener("submit", handleProfileSave);
   $("deleteAccountButton")?.addEventListener("click", handleDeleteAccount);
+
+  // address search for navigation
+  setupAddressSearch({
+    inputId: "startAddress",
+    suggestionsId: "startSuggestions",
+    infoId: "startAddressInfo",
+    latId: "startLat",
+    lonId: "startLon",
+  });
+  setupAddressSearch({
+    inputId: "endAddress",
+    suggestionsId: "endSuggestions",
+    infoId: "endAddressInfo",
+    latId: "endLat",
+    lonId: "endLon",
+  });
 
   $("reportImage")?.addEventListener("change", (e) => {
     const name = e.target.files?.[0]?.name || "";
@@ -301,21 +322,6 @@ function loadSetting(key, fallback) {
 /* ═══════════════════════════════════════
    LEAFLET MAPS
    ═══════════════════════════════════════ */
-function initMainMap() {
-  if (state.leafletMap) { state.leafletMap.invalidateSize(); return; }
-
-  const el = document.getElementById("map");
-  if (!el || el.offsetHeight === 0) return;
-
-  state.leafletMap = L.map(el, { zoomControl: true }).setView(DEFAULT_CENTER, 14);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-  }).addTo(state.leafletMap);
-
-  renderReportPins(state.leafletMap);
-  refreshCurrentLocation({ centerMap: true, silent: false });
-}
-
 function initNavMap() {
   if (state.navMap) { state.navMap.invalidateSize(); return; }
 
@@ -328,6 +334,21 @@ function initNavMap() {
   }).addTo(state.navMap);
 
   hydrateNavForm();
+  renderReportPins(state.navMap);
+  refreshCurrentLocation({ centerMap: false, silent: true });
+}
+
+function initReportMap() {
+  if (state.reportMap) { state.reportMap.invalidateSize(); return; }
+
+  const el = document.getElementById("reportMap");
+  if (!el || el.offsetHeight === 0) return;
+
+  state.reportMap = L.map(el, { zoomControl: true }).setView(DEFAULT_CENTER, 14);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+  }).addTo(state.reportMap);
+
   refreshCurrentLocation({ centerMap: false, silent: true });
 }
 
@@ -335,8 +356,138 @@ function hydrateNavForm() {
   const type = localStorage.getItem("inkomek-user-type") || (state.user?.disability || "wheelchair");
   const $ = (id) => document.getElementById(id);
   if ($("userType")) $("userType").value = type;
+  if ($("endAddress") && !$("endAddress").value) $("endAddress").value = "Абая 1, Алматы";
   if ($("endLat") && !$("endLat").value) $("endLat").value = String(DEFAULT_DESTINATION[0]);
   if ($("endLon") && !$("endLon").value) $("endLon").value = String(DEFAULT_DESTINATION[1]);
+}
+
+/* ═══════════════════════════════════════
+   NOMINATIM ADDRESS SEARCH
+   ═══════════════════════════════════════ */
+function setupAddressSearch(config) {
+  const input = document.getElementById(config.inputId);
+  const list = document.getElementById(config.suggestionsId);
+  const info = document.getElementById(config.infoId);
+  const latEl = document.getElementById(config.latId);
+  const lonEl = document.getElementById(config.lonId);
+  if (!input || !list || !latEl || !lonEl) return;
+
+  let debounceId;
+
+  input.addEventListener("input", () => {
+    const q = input.value.trim();
+    latEl.value = "";
+    lonEl.value = "";
+    if (!q) {
+      list.classList.add("hidden");
+      list.innerHTML = "";
+      if (info) info.textContent = "";
+      return;
+    }
+    clearTimeout(debounceId);
+    debounceId = setTimeout(async () => {
+      const suggestions = await searchAddressSuggestions(q);
+      renderSuggestions(list, suggestions, (choice) => {
+        input.value = choice.display_name;
+        latEl.value = String(choice.lat);
+        lonEl.value = String(choice.lon);
+        if (info) info.textContent = choice.display_name;
+        list.classList.add("hidden");
+        list.innerHTML = "";
+        if (state.navMap) state.navMap.setView([choice.lat, choice.lon], 15);
+      });
+    }, 350);
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(async () => {
+      if (!latEl.value || !lonEl.value) {
+        const match = await geocodeAddress(input.value.trim());
+        if (match) {
+          input.value = match.display_name;
+          latEl.value = String(match.lat);
+          lonEl.value = String(match.lon);
+          if (info) info.textContent = match.display_name;
+        }
+      }
+      list.classList.add("hidden");
+      list.innerHTML = "";
+    }, 200);
+  });
+}
+
+async function searchAddressSuggestions(rawQuery) {
+  const query = biasToKazakhstan(rawQuery);
+  const url = `${NOMINATIM_URL}?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data || []).map((item) => ({
+      lat: Number(item.lat),
+      lon: Number(item.lon),
+      display_name: item.display_name,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function reverseGeocode(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&format=jsonv2`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    return data?.display_name || "";
+  } catch {
+    return "";
+  }
+}
+
+async function geocodeAddress(rawQuery) {
+  const results = await searchAddressSuggestions(rawQuery);
+  return results[0] || null;
+}
+
+function renderSuggestions(container, items, onPick) {
+  if (!items.length) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = items
+    .map(
+      (item, idx) =>
+        `<button type="button" class="address-suggestion-item" role="option" aria-selected="${idx === 0 ? "true" : "false"}"><strong>${esc(
+          (item.display_name.split(",")[0] || "").trim()
+        )}</strong><span>${esc(item.display_name)}</span></button>`
+    )
+    .join("");
+  container.classList.remove("hidden");
+  Array.from(container.querySelectorAll(".address-suggestion-item")).forEach((btn, index) => {
+    btn.addEventListener("click", () => onPick(items[index]));
+  });
+}
+
+function biasToKazakhstan(query) {
+  const lower = query.toLowerCase();
+  const hasCity =
+    lower.includes("almaty") ||
+    lower.includes("алматы") ||
+    lower.includes("astana") ||
+    lower.includes("астана") ||
+    lower.includes("alatau") ||
+    lower.includes("алатау");
+  return hasCity ? query : `${query}, Almaty, Kazakhstan`;
 }
 
 /* ═══════════════════════════════════════
@@ -347,13 +498,37 @@ async function handleNavigateSubmit(e) {
   const $ = (id) => document.getElementById(id);
 
   const userType = $("userType").value;
-  const startCoords = [Number($("startLat").value), Number($("startLon").value)];
-  const endCoords = [Number($("endLat").value), Number($("endLon").value)];
   const statusEl = $("navigationStatus");
   const btn = $("navigateButton");
 
-  if (!isValidCoords(startCoords) || !isValidCoords(endCoords)) {
-    showStatus(statusEl, "Введите корректные координаты.", "error");
+  let start = [Number($("startLat").value), Number($("startLon").value)];
+  let end = [Number($("endLat").value), Number($("endLon").value)];
+
+  if (!isValidCoords(start) || !isValidCoords(end)) {
+    try {
+      const startAddress = $("startAddress")?.value.trim();
+      const endAddress = $("endAddress")?.value.trim();
+      if (startAddress && !isValidCoords(start)) {
+        const res = await geocodeAddress(startAddress);
+        if (res) {
+          $("startLat").value = String(res.lat);
+          $("startLon").value = String(res.lon);
+        }
+      }
+      if (endAddress && !isValidCoords(end)) {
+        const res = await geocodeAddress(endAddress);
+        if (res) {
+          $("endLat").value = String(res.lat);
+          $("endLon").value = String(res.lon);
+        }
+      }
+      start = [Number($("startLat").value), Number($("startLon").value)];
+      end = [Number($("endLat").value), Number($("endLon").value)];
+    } catch (_) {}
+  }
+
+  if (!isValidCoords(start) || !isValidCoords(end)) {
+    showStatus(statusEl, "Не удалось определить координаты по адресу. Уточните адрес.", "error");
     return;
   }
 
@@ -365,7 +540,7 @@ async function handleNavigateSubmit(e) {
     const response = await fetchJson("/navigate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_type: userType, start_coords: startCoords, end_coords: endCoords }),
+      body: JSON.stringify({ user_type: userType, start_coords: start, end_coords: end }),
     });
 
     drawRoute(response.route_coords || []);
@@ -382,7 +557,7 @@ async function handleNavigateSubmit(e) {
 
 function drawRoute(routeCoords) {
   clearRoute();
-  const mapInstance = state.navMap || state.leafletMap;
+  const mapInstance = state.navMap;
   if (!mapInstance || !Array.isArray(routeCoords) || routeCoords.length === 0) return;
 
   const latLngs = routeCoords.map((p) => [Number(p[0]), Number(p[1])]);
@@ -395,7 +570,7 @@ function drawRoute(routeCoords) {
 }
 
 function clearRoute() {
-  const mapInstance = state.navMap || state.leafletMap;
+  const mapInstance = state.navMap;
   if (state.routeLine && mapInstance) mapInstance.removeLayer(state.routeLine);
   state.routeLine = null;
   for (const m of state.routeMarkers) { if (mapInstance) mapInstance.removeLayer(m); }
@@ -504,15 +679,28 @@ async function refreshCurrentLocation({ centerMap = false, silent = false } = {}
     const point = [pos.coords.latitude, pos.coords.longitude];
     state.currentLocation = point;
     appendGpsPoint(point);
-    updateUserMarker(point);
+    const reverseAddress = await reverseGeocode(point[0], point[1]);
+    state.currentAddress = reverseAddress;
+    updateUserMarkers(point, reverseAddress);
 
     const $ = (id) => document.getElementById(id);
     if (!$("startLat")?.value) populateStartFromCurrentLocation();
-    if (centerMap && state.leafletMap) state.leafletMap.setView(point, 15);
-    if (!silent) showStatus($("gpsStatus"), `GPS: ${point[0].toFixed(5)}, ${point[1].toFixed(5)}`, "success");
+    if (centerMap && state.navMap) state.navMap.setView(point, 15);
+    if (state.reportMap) {
+      state.reportMap.setView(point, 15);
+      updateReportIssuePreview(point, reverseAddress);
+    }
+    if (!silent) {
+      const message = reverseAddress
+        ? `Ваш адрес: ${reverseAddress}`
+        : `GPS: ${point[0].toFixed(5)}, ${point[1].toFixed(5)}`;
+      showStatus($("gpsStatus"), message, "success");
+      showStatus($("reportLocationStatus"), `Проблема будет отмечена здесь: ${reverseAddress || `${point[0].toFixed(5)}, ${point[1].toFixed(5)}`}`, "success");
+    }
     return point;
   } catch {
     if (!silent) showStatus(document.getElementById("gpsStatus"), "Не удалось получить GPS.", "error");
+    if (!silent) showStatus(document.getElementById("reportLocationStatus"), "Не удалось определить местоположение для репорта.", "error");
     return null;
   }
 }
@@ -533,7 +721,10 @@ async function runGpsCheckCycle() {
 
   const gpsStatusEl = document.getElementById("gpsStatus");
   if (state.gpsPoints.length < 6) {
-    if (gpsStatusEl) showStatus(gpsStatusEl, `Сбор GPS-точек (${state.gpsPoints.length}/6)...`, "neutral");
+    if (gpsStatusEl) {
+      const prefix = state.currentAddress ? `Адрес: ${state.currentAddress}. ` : "";
+      showStatus(gpsStatusEl, `${prefix}Сбор GPS-точек (${state.gpsPoints.length}/6)...`, "neutral");
+    }
     return;
   }
 
@@ -550,7 +741,10 @@ async function runGpsCheckCycle() {
       if (anomalyEl) { anomalyEl.textContent = `GPS-аномалия${response.anomaly_type ? `: ${response.anomaly_type}` : ""}`; anomalyEl.classList.remove("hidden"); }
     } else {
       if (anomalyEl) anomalyEl.classList.add("hidden");
-      if (gpsStatusEl) showStatus(gpsStatusEl, `GPS мониторинг. Оценка: ${fmtScore(response.score)}.`, "success");
+      if (gpsStatusEl) {
+        const prefix = state.currentAddress ? `Адрес: ${state.currentAddress}. ` : "";
+        showStatus(gpsStatusEl, `${prefix}GPS мониторинг. Оценка: ${fmtScore(response.score)}.`, "success");
+      }
     }
   } catch {
     if (gpsStatusEl) showStatus(gpsStatusEl, "Ошибка проверки GPS.", "error");
@@ -560,14 +754,51 @@ async function runGpsCheckCycle() {
 /* ═══════════════════════════════════════
    MAP MARKERS & PINS
    ═══════════════════════════════════════ */
-function updateUserMarker(point) {
-  const mapInstance = state.leafletMap;
-  if (!mapInstance) return;
+function updateUserMarkers(point, address = "") {
+  const popupText = address || "Ваше местоположение";
 
-  if (state.userMarker) { state.userMarker.setLatLng(point); return; }
-  state.userMarker = L.circleMarker(point, {
-    radius: 10, color: "#0d47a1", fillColor: "#1263bf", fillOpacity: 1, weight: 3,
-  }).addTo(mapInstance).bindPopup("Ваше местоположение");
+  if (state.navMap) {
+    if (state.navUserMarker) {
+      state.navUserMarker.setLatLng(point);
+      state.navUserMarker.bindPopup(popupText);
+    } else {
+      state.navUserMarker = L.circleMarker(point, {
+        radius: 10, color: "#0d47a1", fillColor: "#1263bf", fillOpacity: 1, weight: 3,
+      }).addTo(state.navMap).bindPopup(popupText);
+    }
+  }
+
+  if (state.reportMap) {
+    if (state.reportUserMarker) {
+      state.reportUserMarker.setLatLng(point);
+      state.reportUserMarker.bindPopup(popupText);
+    } else {
+      state.reportUserMarker = L.circleMarker(point, {
+        radius: 10, color: "#0d47a1", fillColor: "#1263bf", fillOpacity: 1, weight: 3,
+      }).addTo(state.reportMap).bindPopup(popupText);
+    }
+  }
+}
+
+function updateReportIssuePreview(point, address = "") {
+  if (!state.reportMap) return;
+  const popupText = address
+    ? `Проблема будет отмечена здесь: ${address}`
+    : "Проблема будет отмечена здесь";
+
+  if (state.reportIssueMarker) {
+    state.reportIssueMarker.setLatLng(point);
+    state.reportIssueMarker.bindPopup(popupText);
+    return;
+  }
+
+  state.reportIssueMarker = L.circleMarker(point, {
+    radius: 9,
+    color: "#8f1414",
+    fillColor: "#b71c1c",
+    fillOpacity: 0.9,
+    weight: 2,
+  }).addTo(state.reportMap).bindPopup(popupText);
 }
 
 function addProblemPin(pin) {
@@ -577,7 +808,8 @@ function addProblemPin(pin) {
     notes: pin.notes || "", createdAt: Date.now(),
   });
   persistPins();
-  if (state.leafletMap) renderReportPins(state.leafletMap);
+  if (state.navMap) renderReportPins(state.navMap);
+  if (state.reportMap) updateReportIssuePreview(pin.location, state.currentAddress);
 }
 
 function renderReportPins(mapInstance) {
@@ -602,8 +834,11 @@ function populateStartFromCurrentLocation() {
   }
   if ($("startLat")) $("startLat").value = String(state.currentLocation[0]);
   if ($("startLon")) $("startLon").value = String(state.currentLocation[1]);
+  if ($("startAddress")) $("startAddress").value = state.currentAddress || "";
+  const info = $("startAddressInfo");
+  if (info) info.textContent = state.currentAddress || "Текущая позиция (GPS)";
   const s = $("navigationStatus");
-  if (s) showStatus(s, "Координаты старта обновлены.", "success");
+  if (s) showStatus(s, "Адрес старта обновлён по GPS.", "success");
 }
 
 function appendGpsPoint(point) {
@@ -615,7 +850,12 @@ function appendGpsPoint(point) {
    UTILITIES
    ═══════════════════════════════════════ */
 async function fetchJson(path, options = {}) {
-  const r = await fetch(`${BASE_URL}${path}`, options);
+  let r;
+  try {
+    r = await fetch(`${BASE_URL}${path}`, options);
+  } catch (error) {
+    throw new Error("Не удалось подключиться к backend. Проверьте, что API запущен и CORS разрешён.");
+  }
   const ct = r.headers.get("content-type") || "";
   const payload = ct.includes("application/json") ? await r.json() : await r.text();
   if (!r.ok) {

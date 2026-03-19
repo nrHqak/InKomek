@@ -239,7 +239,7 @@ a { color: var(--brown); text-decoration: none; }
 
 .panel-map { display: flex; flex-direction: column; }
 
-#map, #navMap {
+#navMap, #reportMap {
   min-height: 480px; border-radius: 16px;
   overflow: hidden; border: 2px solid rgba(59, 31, 10, 0.08);
   flex: 1;
@@ -251,7 +251,11 @@ a { color: var(--brown); text-decoration: none; }
   gap: 20px;
 }
 
-.report-layout { max-width: 600px; }
+.report-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 520px) minmax(340px, 1fr);
+  gap: 20px;
+}
 
 .profile-layout {
   display: grid;
@@ -281,8 +285,6 @@ a { color: var(--brown); text-decoration: none; }
    ═══════════════════════════════════════ */
 .form-grid { display: grid; gap: 16px; }
 
-.coord-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
 label { display: grid; gap: 6px; font-weight: 700; font-size: 0.95rem; }
 
 input, textarea, select {
@@ -297,6 +299,59 @@ input::placeholder, textarea::placeholder { color: #b5a48e; }
 input:focus, textarea:focus, select:focus { outline: none; border-color: var(--yellow); }
 
 textarea { min-height: 100px; resize: vertical; }
+
+/* address search */
+.address-field {
+  display: grid;
+  gap: 6px;
+}
+
+.address-input-wrap {
+  position: relative;
+}
+
+.address-info {
+  font-size: 0.9rem;
+  color: var(--brown-soft);
+}
+
+.address-suggestions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  margin-top: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 14px;
+  border: 2px solid rgba(59, 31, 10, 0.12);
+  box-shadow: var(--shadow);
+}
+
+.address-suggestion-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  color: var(--brown);
+}
+
+.address-suggestion-item strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.address-suggestion-item:hover,
+.address-suggestion-item[aria-selected="true"] {
+  background: var(--yellow-light);
+}
 
 /* ═══════════════════════════════════════
    FILE UPLOAD
@@ -478,6 +533,7 @@ button:hover:not(:disabled), .primary-button:hover, .secondary-button:hover { tr
    ═══════════════════════════════════════ */
 @media (max-width: 960px) {
   .nav-two-col { grid-template-columns: 1fr; }
+  .report-layout { grid-template-columns: 1fr; }
   .profile-layout { grid-template-columns: 1fr; }
 
   .nav-hamburger { display: flex; }
@@ -512,7 +568,7 @@ button:hover:not(:disabled), .primary-button:hover, .secondary-button:hover { tr
   .hero { padding: 32px 18px; }
   .auth-card { padding: 28px 20px; }
   .coord-row, .button-row { grid-template-columns: 1fr; }
-  #map, #navMap { min-height: 340px; }
+  #navMap, #reportMap { min-height: 340px; }
   .sos-button { width: 160px; height: 160px; font-size: 1.6rem; }
 }
 

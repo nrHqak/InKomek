@@ -26,7 +26,6 @@
     </button>
     <div class="nav-links" id="navLinks">
       <a href="#home" class="nav-link" data-page="home">Главная</a>
-      <a href="#map" class="nav-link" data-page="map">Карта</a>
       <a href="#navigate" class="nav-link" data-page="navigate">Навигация</a>
       <a href="#report" class="nav-link" data-page="report">Репорт</a>
       <a href="#sos" class="nav-link nav-link-sos" data-page="sos">SOS</a>
@@ -54,12 +53,12 @@
         <h1>Добро пожаловать в InKomek</h1>
         <p class="hero-sub">Инклюзивный городской помощник для людей с инвалидностью в Алатау</p>
         <div class="hero-actions">
-          <a href="#map" class="primary-button">Открыть карту</a>
+          <a href="#navigate" class="primary-button">Открыть карту</a>
           <a href="#signup" class="secondary-button">Создать аккаунт</a>
         </div>
       </div>
       <div class="features-grid">
-        <a href="#map" class="feature-card">
+        <a href="#navigate" class="feature-card">
           <div class="feature-icon feature-icon-blue">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </div>
@@ -90,28 +89,11 @@
       </div>
     </section>
 
-    <!-- ──── MAP ──── -->
-    <section class="page hidden" id="page-map">
-      <div class="page-header">
-        <h2>Карта доступности</h2>
-        <button id="refreshLocationButton" class="secondary-button" type="button">Обновить GPS</button>
-      </div>
-      <div class="panel panel-map">
-        <div id="map" aria-label="Карта доступности"></div>
-        <div class="map-legend">
-          <span><i class="legend-dot legend-user"></i>Вы здесь</span>
-          <span><i class="legend-dot legend-route"></i>Маршрут</span>
-          <span><i class="legend-dot legend-problem"></i>Проблема</span>
-        </div>
-        <div id="gpsStatus" class="status status-neutral" role="status" aria-live="polite">Ожидание GPS...</div>
-        <div id="anomalyBanner" class="alert-banner hidden" role="alert">Обнаружена GPS-аномалия. Проверьте маршрут.</div>
-      </div>
-    </section>
-
     <!-- ──── NAVIGATE ──── -->
     <section class="page hidden" id="page-navigate">
       <div class="page-header">
         <h2>Навигация</h2>
+        <button id="refreshLocationButton" class="secondary-button" type="button">Обновить GPS</button>
       </div>
       <div class="nav-two-col">
         <div class="panel">
@@ -124,36 +106,49 @@
                 <option value="elderly">Пожилой возраст</option>
               </select>
             </label>
-            <div class="coord-row">
-              <label>
-                Широта (старт)
-                <input id="startLat" type="number" step="any" required placeholder="43.238949">
-              </label>
-              <label>
-                Долгота (старт)
-                <input id="startLon" type="number" step="any" required placeholder="76.889709">
-              </label>
+
+            <div class="address-field">
+              <div class="address-input-wrap">
+                <label>
+                  Адрес (старт)
+                  <input id="startAddress" type="text" autocomplete="off" placeholder="Например: Назарбаев 226, Алматы">
+                </label>
+                <div id="startSuggestions" class="address-suggestions hidden" role="listbox"></div>
+              </div>
+              <div id="startAddressInfo" class="address-info" aria-live="polite"></div>
+              <input id="startLat" type="hidden">
+              <input id="startLon" type="hidden">
             </div>
-            <div class="coord-row">
-              <label>
-                Широта (финиш)
-                <input id="endLat" type="number" step="any" required placeholder="43.246998">
-              </label>
-              <label>
-                Долгота (финиш)
-                <input id="endLon" type="number" step="any" required placeholder="76.923778">
-              </label>
+
+            <div class="address-field">
+              <div class="address-input-wrap">
+                <label>
+                  Адрес (финиш)
+                  <input id="endAddress" type="text" autocomplete="off" placeholder="Например: Абая 1, Алматы">
+                </label>
+                <div id="endSuggestions" class="address-suggestions hidden" role="listbox"></div>
+              </div>
+              <div id="endAddressInfo" class="address-info" aria-live="polite"></div>
+              <input id="endLat" type="hidden">
+              <input id="endLon" type="hidden">
             </div>
             <div class="button-row">
               <button id="useCurrentLocationButton" class="secondary-button" type="button">Моя позиция</button>
               <button id="navigateButton" class="primary-button" type="submit">Построить маршрут</button>
             </div>
           </form>
-          <div id="navigationStatus" class="status status-neutral" role="status" aria-live="polite">Введите координаты маршрута.</div>
+          <div id="navigationStatus" class="status status-neutral" role="status" aria-live="polite">Введите адреса старта и финиша.</div>
           <div id="routeSummary" class="route-summary hidden"></div>
         </div>
         <div class="panel panel-map">
           <div id="navMap" aria-label="Карта маршрута"></div>
+          <div class="map-legend">
+            <span><i class="legend-dot legend-user"></i>Вы здесь</span>
+            <span><i class="legend-dot legend-route"></i>Маршрут</span>
+            <span><i class="legend-dot legend-problem"></i>Проблема</span>
+          </div>
+          <div id="gpsStatus" class="status status-neutral" role="status" aria-live="polite">Ожидание GPS...</div>
+          <div id="anomalyBanner" class="alert-banner hidden" role="alert">Обнаружена GPS-аномалия. Проверьте маршрут.</div>
         </div>
       </div>
     </section>
@@ -182,6 +177,10 @@
           </form>
           <div id="reportStatus" class="status status-neutral" role="status" aria-live="polite">Загрузите фото для анализа.</div>
           <div id="reportResult" class="report-result hidden"></div>
+        </div>
+        <div class="panel panel-map">
+          <div id="reportMap" aria-label="Карта места репорта"></div>
+          <div id="reportLocationStatus" class="status status-neutral" role="status" aria-live="polite">Определяем точку, где будет отмечена проблема.</div>
         </div>
       </div>
     </section>
