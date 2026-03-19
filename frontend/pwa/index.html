@@ -64,6 +64,9 @@
           <button type="button" id="roleUserButton" class="role-button">Я пользователь</button>
           <button type="button" id="roleVolunteerButton" class="role-button role-button-vol">Я волонтёр</button>
         </div>
+        <div style="max-width:720px; margin:0 auto 10px;">
+          <button type="button" id="businessEntryButton" class="primary-button" style="width:100%;">Для бизнеса</button>
+        </div>
         <div class="hero-actions">
           <a href="#navigate" class="primary-button">Открыть карту</a>
           <a href="#signup" class="secondary-button">Создать аккаунт</a>
@@ -159,6 +162,11 @@
           </form>
           <div id="navigationStatus" class="status status-neutral" role="status" aria-live="polite">Введите адреса старта и финиша.</div>
           <div id="routeSummary" class="route-summary hidden"></div>
+
+          <div class="business-toolbar" style="margin-top:16px;">
+            <button id="businessFilterToggleButton" class="secondary-button" type="button">Показать бизнесы для ОВЗ</button>
+          </div>
+          <div id="businessCardPanel" class="hidden" aria-live="polite"></div>
         </div>
         <div class="panel panel-map">
           <div id="navMap" aria-label="Карта маршрута"></div>
@@ -492,6 +500,184 @@
           </div>
           <h3 style="margin-top:24px">Опасная зона</h3>
           <button class="danger-button" id="deleteAccountButton">Удалить аккаунт</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── BUSINESS REGISTER ──── -->
+    <section class="page hidden" id="page-business-register">
+      <div class="page-header">
+        <h2>Регистрация бизнеса</h2>
+      </div>
+
+      <div class="report-layout">
+        <div class="panel">
+          <form id="businessRegisterForm" class="form-grid">
+            <label>
+              Название бизнеса
+              <input id="businessName" type="text" placeholder="Например: Центр реабилитации «Шаг вперёд»" required>
+            </label>
+
+            <label>
+              Категория
+              <select id="businessCategory" required>
+                <option value="medical_equipment">Медицинское оборудование</option>
+                <option value="rehabilitation_center">Реабилитационный центр</option>
+                <option value="specialized_clinic">Специализированная клиника</option>
+                <option value="accessible_transport">Доступный транспорт</option>
+                <option value="inclusive_sport_fitness">Инклюзивный спорт и фитнес</option>
+                <option value="education_ovz">Обучение и образование для людей с ОВЗ</option>
+                <option value="psychological_support">Психологическая поддержка</option>
+                <option value="accessible_housing">Доступное жильё</option>
+                <option value="other">Другое (с описанием)</option>
+              </select>
+            </label>
+
+            <label>
+              Короткое описание (до 200 символов)
+              <textarea id="businessShortDescription" rows="3" maxlength="200" required placeholder="Чем вы помогаете людям с инвалидностью"></textarea>
+            </label>
+            <div id="businessShortCount" class="status status-neutral" style="margin-top:-6px;">0 / 200</div>
+
+            <label>
+              Телефон
+              <input id="businessPhone" type="tel" placeholder="+7 7__ ___-__-__" required>
+            </label>
+
+            <label>
+              Адрес
+              <input id="businessAddress" type="text" autocomplete="off" placeholder="Введите адрес (город, улица, дом)" required>
+            </label>
+            <div class="button-row">
+              <button id="businessGeocodeButton" class="secondary-button" type="button">Найти на карте</button>
+              <button id="businessUseMyLocationButton" class="secondary-button" type="button">Моя позиция</button>
+            </div>
+            <input id="businessLat" type="hidden">
+            <input id="businessLon" type="hidden">
+            <div id="businessAddressInfo" class="status status-neutral hidden" role="status" aria-live="polite"></div>
+
+            <label>
+              Сайт (необязательно)
+              <input id="businessWebsite" type="url" placeholder="https://example.com">
+            </label>
+
+            <div>
+              <div style="font-weight:900; margin-bottom:10px;">С какими людьми вы работаете</div>
+              <div class="checkbox-grid" role="group" aria-label="Доступность для ОВЗ">
+                <label class="check-item"><input type="checkbox" id="tagWheelchair"> Инвалидная коляска</label>
+                <label class="check-item"><input type="checkbox" id="tagBlind"> Слепые / слабовидящие</label>
+                <label class="check-item"><input type="checkbox" id="tagDeaf"> Глухие / слабослышащие</label>
+                <label class="check-item"><input type="checkbox" id="tagElderly"> Пожилые</label>
+                <label class="check-item"><input type="checkbox" id="tagCognitive"> Интеллектуальные нарушения / когнитивные</label>
+              </div>
+            </div>
+
+            <label class="file-upload-label">
+              Фото (для карты) - необязательно
+              <div class="file-upload-area" id="businessPhotoArea">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Нажмите или перетащите фото</span>
+                <span class="file-name" id="businessPhotoName"></span>
+              </div>
+              <input id="businessPhoto" type="file" accept="image/*" class="sr-only">
+            </label>
+
+            <button id="businessRegisterSubmit" type="submit" class="primary-button">Сохранить бизнес</button>
+          </form>
+          <div id="businessRegisterStatus" class="status hidden" role="status" aria-live="polite"></div>
+        </div>
+
+        <div class="panel panel-map">
+          <div id="businessRegMap" aria-label="Карта бизнеса"></div>
+          <div class="map-legend">
+            <span><i class="legend-dot legend-user"></i>Метка адреса</span>
+          </div>
+          <div id="businessRegGpsStatus" class="status status-neutral hidden" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── BUSINESS DASHBOARD ──── -->
+    <section class="page hidden" id="page-business-dashboard">
+      <div class="page-header">
+        <h2>Кабинет бизнеса</h2>
+      </div>
+
+      <div class="report-layout">
+        <div class="panel">
+          <div class="alert-banner" style="padding:14px 16px; margin-bottom:16px;">
+            <div style="font-weight:900;">Статус верификации: <span style="color: var(--danger-dark);">На проверке</span></div>
+            <div id="businessViewsText" style="margin-top:6px; font-weight:800;">Просмотры: 0</div>
+          </div>
+
+          <form id="businessEditForm" class="form-grid">
+            <label>
+              Название бизнеса
+              <input id="businessEditName" type="text" required>
+            </label>
+
+            <label>
+              Категория
+              <select id="businessEditCategory" required>
+                <option value="medical_equipment">Медицинское оборудование</option>
+                <option value="rehabilitation_center">Реабилитационный центр</option>
+                <option value="specialized_clinic">Специализированная клиника</option>
+                <option value="accessible_transport">Доступный транспорт</option>
+                <option value="inclusive_sport_fitness">Инклюзивный спорт и фитнес</option>
+                <option value="education_ovz">Обучение и образование для людей с ОВЗ</option>
+                <option value="psychological_support">Психологическая поддержка</option>
+                <option value="accessible_housing">Доступное жильё</option>
+                <option value="other">Другое (с описанием)</option>
+              </select>
+            </label>
+
+            <label>
+              Описание (до 200 символов)
+              <textarea id="businessEditShortDescription" rows="3" maxlength="200" required></textarea>
+            </label>
+            <div id="businessEditShortCount" class="status status-neutral" style="margin-top:-6px;">0 / 200</div>
+
+            <label>
+              Телефон
+              <input id="businessEditPhone" type="tel" required>
+            </label>
+
+            <label>
+              Адрес
+              <input id="businessEditAddress" type="text" autocomplete="off" required>
+            </label>
+            <div class="button-row">
+              <button id="businessEditGeocodeButton" class="secondary-button" type="button">Найти на карте</button>
+              <button id="businessEditUseMyLocationButton" class="secondary-button" type="button">Моя позиция</button>
+            </div>
+            <input id="businessEditLat" type="hidden">
+            <input id="businessEditLon" type="hidden">
+            <div id="businessEditAddressInfo" class="status status-neutral hidden" role="status" aria-live="polite"></div>
+
+            <label>
+              Сайт (необязательно)
+              <input id="businessEditWebsite" type="url">
+            </label>
+
+            <div>
+              <div style="font-weight:900; margin-bottom:10px;">С какими людьми вы работаете</div>
+              <div class="checkbox-grid" role="group" aria-label="Доступность для ОВЗ">
+                <label class="check-item"><input type="checkbox" id="tagEditWheelchair"> Инвалидная коляска</label>
+                <label class="check-item"><input type="checkbox" id="tagEditBlind"> Слепые / слабовидящие</label>
+                <label class="check-item"><input type="checkbox" id="tagEditDeaf"> Глухие / слабослышащие</label>
+                <label class="check-item"><input type="checkbox" id="tagEditElderly"> Пожилые</label>
+                <label class="check-item"><input type="checkbox" id="tagEditCognitive"> Интеллектуальные нарушения / когнитивные</label>
+              </div>
+            </div>
+
+            <button id="businessEditSubmit" type="submit" class="primary-button">Сохранить изменения</button>
+          </form>
+
+          <div id="businessEditStatus" class="status hidden" role="status" aria-live="polite"></div>
+        </div>
+
+        <div class="panel panel-map">
+          <div id="businessDashMap" aria-label="Карта бизнеса (редактирование)"></div>
         </div>
       </div>
     </section>

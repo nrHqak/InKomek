@@ -2,8 +2,8 @@
    DESIGN TOKENS
    ═══════════════════════════════════════ */
 :root {
-  --yellow: #f6c12a;
-  --yellow-dark: #d9a619;
+  --yellow: #F5A800;
+  --yellow-dark: #D48A00;
   --yellow-light: #ffe9a7;
   --brown: #3b1f0a;
   --brown-soft: #5f3518;
@@ -190,6 +190,146 @@ a { color: var(--brown); text-decoration: none; }
 
 .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
+/* role entry */
+.role-entry {
+  margin: 18px auto 26px;
+  max-width: 720px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.role-button {
+  width: 100%;
+  min-height: 72px;
+  border-radius: 20px;
+  border: 2px solid rgba(59, 31, 10, 0.08);
+  font-size: 1.15rem;
+  font-weight: 900;
+  background: var(--surface);
+  color: var(--brown);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.role-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 168, 0, 0.9);
+  background: var(--cream);
+}
+
+.role-button-vol {
+  background: var(--yellow);
+  border-color: rgba(59, 31, 10, 0.16);
+}
+
+.role-button-vol:hover {
+  background: var(--yellow-dark);
+}
+
+/* volunteer / requests */
+.volunteer-layout {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 20px;
+}
+
+.requests-list {
+  display: grid;
+  gap: 14px;
+}
+
+.request-card {
+  background: #fffdf8;
+  border: 2px solid rgba(59, 31, 10, 0.08);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.request-meta {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.request-meta strong {
+  display: inline-block;
+  min-width: 140px;
+}
+
+.status-toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0 0;
+}
+
+.toggle-btn {
+  min-height: 56px;
+  border-radius: 16px;
+  border: 2px solid rgba(59, 31, 10, 0.10);
+  background: var(--surface);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.toggle-btn.active {
+  background: var(--yellow);
+  border-color: rgba(59, 31, 10, 0.16);
+}
+
+.toggle-btn.busy.active {
+  background: #FBE7E7;
+  border-color: rgba(183, 28, 28, 0.25);
+}
+
+.two-col-forms {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 2px solid rgba(59, 31, 10, 0.08);
+  background: #fffdf8;
+  min-height: 56px;
+  cursor: pointer;
+}
+
+.check-item input {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 960px) {
+  .role-entry {
+    grid-template-columns: 1fr;
+  }
+  .volunteer-layout {
+    grid-template-columns: 1fr;
+  }
+  .two-col-forms {
+    grid-template-columns: 1fr;
+  }
+  .checkbox-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ═══════════════════════════════════════
    FEATURE CARDS (HOME)
    ═══════════════════════════════════════ */
@@ -239,7 +379,7 @@ a { color: var(--brown); text-decoration: none; }
 
 .panel-map { display: flex; flex-direction: column; }
 
-#navMap, #reportMap {
+#navMap, #reportMap, #volunteerMap, #userRequestsMap, #businessRegMap, #businessDashMap {
   min-height: 480px; border-radius: 16px;
   overflow: hidden; border: 2px solid rgba(59, 31, 10, 0.08);
   flex: 1;
@@ -279,6 +419,20 @@ a { color: var(--brown); text-decoration: none; }
 .legend-user { background: #1263bf; }
 .legend-route { background: var(--success); }
 .legend-problem { background: var(--danger); }
+
+/* ═══════════════════════════════════════
+   BUSINESSES UI
+   ═══════════════════════════════════════ */
+.business-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.business-card {
+  background: #fffdf8;
+  border: 2px solid rgba(59, 31, 10, 0.08);
+  border-radius: 16px;
+  padding: 14px;
+}
+.business-card a { word-break: break-word; }
+.business-card button { min-height: 56px; }
+.business-card img { display: block; }
 
 /* ═══════════════════════════════════════
    FORMS
@@ -376,7 +530,7 @@ textarea { min-height: 100px; resize: vertical; }
 
 button, .primary-button, .secondary-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 52px; padding: 12px 24px;
+  min-height: 56px; padding: 12px 24px;
   border: none; border-radius: 16px;
   font-family: inherit; font-weight: 800; font-size: 1rem;
   cursor: pointer; transition: transform var(--transition), background var(--transition), opacity var(--transition);
@@ -568,7 +722,7 @@ button:hover:not(:disabled), .primary-button:hover, .secondary-button:hover { tr
   .hero { padding: 32px 18px; }
   .auth-card { padding: 28px 20px; }
   .coord-row, .button-row { grid-template-columns: 1fr; }
-  #navMap, #reportMap { min-height: 340px; }
+  #navMap, #reportMap, #volunteerMap, #userRequestsMap, #businessRegMap, #businessDashMap { min-height: 340px; }
   .sos-button { width: 160px; height: 160px; font-size: 1.6rem; }
 }
 
