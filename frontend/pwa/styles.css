@@ -357,6 +357,80 @@ a { color: var(--brown); text-decoration: none; }
 
 .feature-card-danger { border-color: rgba(183, 28, 28, 0.15); }
 
+/* ═══════════════════════════════════════
+   PRICING (HOME / B2B / B2G)
+   ═══════════════════════════════════════ */
+.pricing-wrap { display: grid; gap: 22px; }
+.pricing-section { display: grid; gap: 14px; }
+.pricing-title { font-size: 1.35rem; margin: 0 0 10px; }
+
+.pricing-b2b-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.pricing-card {
+  background: #fffdf8;
+  border: 2px solid rgba(59, 31, 10, 0.08);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 10px;
+}
+
+.pricing-card.popular {
+  border-color: rgba(245, 168, 0, 0.85);
+  box-shadow: 0 18px 46px rgba(245, 168, 0, 0.18);
+  transform: translateY(-2px);
+}
+
+.popular-badge {
+  align-self: flex-start;
+  background: var(--yellow);
+  color: var(--brown);
+  font-weight: 900;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 2px solid rgba(59, 31, 10, 0.14);
+}
+
+.pricing-card-header { display: grid; gap: 6px; margin-top: 6px; }
+.pricing-card-name { font-weight: 1000; font-size: 1.25rem; }
+.pricing-card-price { font-weight: 1000; font-size: 1.2rem; color: var(--brown); }
+
+.pricing-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: var(--brown-soft);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.pricing-cta { display: grid; gap: 10px; margin-top: 4px; }
+
+.pricing-b2g-card {
+  background: #fffdf8;
+  border: 2px solid rgba(59, 31, 10, 0.08);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.pricing-b2g-header { display: grid; gap: 6px; margin-bottom: 10px; }
+.pricing-b2g-title { font-weight: 1000; font-size: 1.35rem; }
+.pricing-b2g-subtitle { color: var(--brown-soft); font-weight: 900; }
+.pricing-b2g-desc { color: var(--brown-soft); line-height: 1.6; font-weight: 700; margin: 10px 0 14px; }
+
+@media (max-width: 960px) {
+  .pricing-b2b-grid { grid-template-columns: 1fr; }
+  .pricing-card.popular { transform: none; }
+}
+
 .feature-icon {
   width: 56px; height: 56px; border-radius: 16px;
   display: flex; align-items: center; justify-content: center;

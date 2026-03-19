@@ -24,6 +24,7 @@ const PAGES = [
   "volunteer-home",
   "business-register",
   "business-dashboard",
+  "pricing",
 ];
 
 /* ═══════════════════════════════════════
@@ -287,6 +288,22 @@ function bindGlobalEvents() {
   });
   $("businessEditUseMyLocationButton")?.addEventListener("click", () => useMyLocationForDashBusiness());
   $("businessEditForm")?.addEventListener("submit", handleBusinessEditSubmit);
+
+  // Pricing buttons (local-only)
+  document.addEventListener("click", (e) => {
+    const planBtn = e.target.closest?.("[data-business-plan-cta]");
+    if (planBtn) {
+      const plan = planBtn.getAttribute("data-business-plan-cta") || "starter";
+      localStorage.setItem("inkomek-selected-business-plan", JSON.stringify(plan));
+      location.hash = "#business-register";
+      return;
+    }
+
+    const routeBtn = e.target.closest?.("[data-business-route-to-inkomek]");
+    if (routeBtn) {
+      prefillNavigateToInkomek();
+    }
+  });
 
   loadSettings();
 }
@@ -1554,13 +1571,18 @@ async function verifyUserDisabilityDocument(file) {
 
     const ui = deriveVerificationUi(state.user);
     const tone = ui.statusKey === "verified" ? "success" : ui.statusKey === "not-verified" ? "error" : "loading";
+    const payload2 = state.user.documentVerification || {};
+    const docType = payload2.document_type || payload2.documentType || "unknown";
+    const conf = Number(payload2.confidence || state.user.verificationConfidence || 0);
+    const reason = payload2.reason || state.user.verificationReason || "";
+    const confText = `${conf.toFixed(2)}`;
+
+    const msgVerified = `✅ Верифицирован. Тип: ${esc(docType)}. Уверенность: ${esc(confText)}. ${esc(reason)}`;
+    const msgNotVerified = `❌ Не верифицировано. Тип: ${esc(docType)}. Уверенность: ${esc(confText)}. ${esc(reason)}`;
+    const msgUnder = `🟡 На проверке. Тип: ${esc(docType)}. Уверенность: ${esc(confText)}. ${esc(reason)}`;
     showStatus(
       profileStatusEl,
-      ui.statusKey === "verified"
-        ? "Документ верифицирован."
-        : ui.statusKey === "not-verified"
-          ? "Документ не верифицирован."
-          : "Документ отправлен на проверку.",
+      ui.statusKey === "verified" ? msgVerified : ui.statusKey === "not-verified" ? msgNotVerified : msgUnder,
       tone === "loading" ? "neutral" : tone
     );
   } catch (err) {
@@ -1570,7 +1592,10 @@ async function verifyUserDisabilityDocument(file) {
     syncAuthUI();
     hydrateProfile();
 
-    const msg = err instanceof Error ? err.message : "Ошибка проверки документа.";
+    let msg = err instanceof Error ? err.message : "Ошибка проверки документа.";
+    if (msg && msg.toLowerCase().includes("failed to fetch")) {
+      msg = `Не удалось связаться с сервером. Проверьте доступность ${BASE_URL}${VERIFY_DOCUMENT_PATH} и CORS.`;
+    }
     const ui = deriveVerificationUi(state.user);
     if (profileBadgeEl) applyVerificationBadgeToEl(profileBadgeEl, state.user);
     if (navBadgeEl) applyVerificationBadgeToEl(navBadgeEl, state.user);
@@ -2248,6 +2273,21 @@ function prefillNavigateForBusiness(business) {
   hideBusinessCard();
 }
 
+function prefillNavigateToInkomek() {
+  const endAddress = document.getElementById("endAddress");
+  const endLat = document.getElementById("endLat");
+  const endLon = document.getElementById("endLon");
+  const statusEl = document.getElementById("navigationStatus");
+
+  if (endAddress) endAddress.value = "InKomek, Алматы";
+  if (endLat) endLat.value = String(DEFAULT_DESTINATION[0]);
+  if (endLon) endLon.value = String(DEFAULT_DESTINATION[1]);
+
+  if (statusEl) showStatus(statusEl, "Адрес InKomek подставлен. Постройте маршрут.", "success");
+  location.hash = "#navigate";
+}
+
+// Backward compatible alias for event handler in pricing page
 function hideBusinessCard() {
   const panel = document.getElementById("businessCardPanel");
   if (panel) {
