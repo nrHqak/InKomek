@@ -17,15 +17,15 @@
 
   <!-- ═══════════ NAVBAR ═══════════ -->
   <nav class="navbar" id="navbar">
-    <a href="#home" class="nav-brand">
+    <a href="#home" class="nav-brand" id="navBrandLink">
       <img src="./assets/logo.png" alt="InKomek" class="nav-logo">
-      <span class="nav-brand-text">InKomek</span>
+      <span class="sr-only">InKomek</span>
     </a>
-    <button class="nav-hamburger" id="hamburger" aria-label="Open menu">
-      <span></span><span></span><span></span>
+    <button class="nav-hamburger" id="hamburger" aria-label="Открыть меню" aria-expanded="false" aria-controls="navLinks" type="button">
+      ☰
     </button>
     <div class="nav-links" id="navLinks">
-      <a href="#home" class="nav-link" data-page="home">Главная</a>
+      <a href="#home" class="nav-link" data-page="home" id="navHomeLink">Главная</a>
       <a href="#navigate" class="nav-link" data-page="navigate">Навигация</a>
       <a href="#report" class="nav-link" data-page="report">Репорт</a>
       <a href="#sos" class="nav-link nav-link-sos" data-page="sos">SOS</a>
@@ -39,7 +39,10 @@
         </a>
         <a href="#profile" class="nav-link" data-page="profile">
           <span class="nav-avatar" id="navAvatarInitial">U</span>
-          Профиль
+          <span class="nav-user-meta">
+            <span class="nav-user-name" id="navUserName">Пользователь</span>
+            <span class="nav-verification-badge verification-badge not-verified" id="navVerificationBadge">❌ Не верифицировано</span>
+          </span>
         </a>
         <button class="nav-link nav-link-ghost" id="logoutButton">Выйти</button>
       </div>
@@ -48,6 +51,7 @@
         Волонтёр
       </a>
     </div>
+    <button type="button" class="nav-backdrop" id="navBackdrop" aria-label="Закрыть меню"></button>
   </nav>
 
   <!-- ═══════════ PAGE CONTAINER ═══════════ -->
@@ -55,57 +59,185 @@
 
     <!-- ──── HOME ──── -->
     <section class="page" id="page-home">
-      <div class="hero">
-        <img src="./assets/logo.png" alt="" class="hero-logo">
-        <h1>Добро пожаловать в InKomek</h1>
-        <p class="hero-sub">Инклюзивный городской помощник для людей с инвалидностью в Алатау</p>
+      <div class="home-hero">
+        <div class="home-hero-copy">
+          <div class="hero-kicker">Инклюзивная городская платформа</div>
+          <img src="./assets/logo.png" alt="" class="hero-logo">
+          <h1>Добро пожаловать в InKomek</h1>
+          <p class="hero-sub">Навигация, помощь и доступные сервисы для людей с инвалидностью, волонтёров и социально ответственного бизнеса.</p>
 
-        <div class="role-entry" aria-label="Выберите роль">
-          <button type="button" id="roleUserButton" class="role-button">Я пользователь</button>
-          <button type="button" id="roleVolunteerButton" class="role-button role-button-vol">Я волонтёр</button>
+          <div class="home-role-title">Выберите ваш сценарий</div>
+          <div class="role-entry" aria-label="Выберите роль">
+            <a href="#signin" id="roleUserButton" class="role-button">
+              <span class="role-button-title">Я пользователь</span>
+              <span class="role-button-sub">Маршруты, помощь, безопасность</span>
+            </a>
+            <a href="#volunteer-signin" id="roleVolunteerButton" class="role-button role-button-vol">
+              <span class="role-button-title">Я волонтёр</span>
+              <span class="role-button-sub">Запросы рядом и быстрый отклик</span>
+            </a>
+          </div>
+          <div class="home-business-entry">
+            <button type="button" id="businessEntryButton" class="role-button role-button-business">
+              <span class="role-button-title">Для бизнеса</span>
+              <span class="role-button-sub">Листинг, верификация и доступность на карте</span>
+            </button>
+          </div>
+
+          <div class="hero-actions">
+            <a href="#navigate" class="primary-button">Открыть карту</a>
+            <a href="#signup" class="secondary-button">Создать аккаунт</a>
+          </div>
         </div>
-        <div class="hero-actions">
-          <a href="#navigate" class="primary-button">Открыть карту</a>
-          <a href="#signup" class="secondary-button">Создать аккаунт</a>
+
+        <div class="home-hero-side" aria-label="Ключевые возможности">
+          <div class="home-highlight-card">
+            <div class="home-highlight-label">Автономная помощь</div>
+            <div class="home-highlight-value">GPS + ИИ</div>
+            <p>Навигация и авто-реакция на проблему без лишних действий со стороны пользователя.</p>
+          </div>
+
+          <div class="home-highlight-grid">
+            <div class="home-mini-card">
+              <strong>Доступные маршруты</strong>
+              <span>С учётом типа инвалидности</span>
+            </div>
+            <div class="home-mini-card">
+              <strong>Служба помощи</strong>
+              <span>Волонтёры и SOS рядом</span>
+            </div>
+            <div class="home-mini-card">
+              <strong>Проверенные сервисы</strong>
+              <span>Бизнесы и полезные точки города</span>
+            </div>
+            <div class="home-mini-card">
+              <strong>Простой интерфейс</strong>
+              <span>Крупный текст и большие кнопки</span>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="features-grid">
-        <a href="#navigate" class="feature-card">
+
+      <div class="home-section-head">
+        <div>
+          <div class="hero-kicker">Основные сценарии</div>
+          <h2>Что можно сделать прямо сейчас</h2>
+        </div>
+        <p>Каждый раздел спроектирован так, чтобы оставаться понятным, контрастным и удобным при реальном использовании на улице.</p>
+      </div>
+
+      <div class="features-grid home-features-grid">
+        <a href="#navigate" class="feature-card home-feature-card">
           <div class="feature-icon feature-icon-blue">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </div>
+          <div class="home-feature-tag">Карта</div>
           <h3>Карта доступности</h3>
           <p>Отслеживайте проблемные точки и доступные маршруты в реальном времени</p>
         </a>
-        <a href="#navigate" class="feature-card">
+        <a href="#navigate" class="feature-card home-feature-card">
           <div class="feature-icon feature-icon-green">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
           </div>
+          <div class="home-feature-tag">Навигация</div>
           <h3>Навигация</h3>
           <p>Персонализированные маршруты с учётом типа инвалидности</p>
         </a>
-        <a href="#report" class="feature-card">
+        <a href="#report" class="feature-card home-feature-card">
           <div class="feature-icon feature-icon-orange">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           </div>
+          <div class="home-feature-tag">ИИ-репорт</div>
           <h3>Репорт проблем</h3>
           <p>Сфотографируйте проблему — ИИ классифицирует её автоматически</p>
         </a>
-        <a href="#sos" class="feature-card feature-card-danger">
+        <a href="#sos" class="feature-card feature-card-danger home-feature-card">
           <div class="feature-icon feature-icon-red">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
+          <div class="home-feature-tag">SOS</div>
           <h3>Экстренная помощь</h3>
           <p>Мгновенная отправка SOS-сигнала с вашим местоположением</p>
         </a>
 
-        <a href="#request-help" class="feature-card">
+        <a href="#request-help" class="feature-card home-feature-card">
           <div class="feature-icon feature-icon-blue">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/><path d="M12 7v5l3 3"/></svg>
           </div>
+          <div class="home-feature-tag">Волонтёры</div>
           <h3>Запросить помощь</h3>
           <p>Отправьте заявку — волонтёры увидят её в своей ленте</p>
         </a>
+      </div>
+    </section>
+
+    <!-- ──── USER DASHBOARD ──── -->
+    <section class="page hidden" id="page-dashboard">
+      <div class="dashboard-hero">
+        <div class="dashboard-hero-copy">
+          <div class="hero-kicker">Личный центр управления</div>
+          <h2>Быстрый доступ ко всем важным функциям</h2>
+          <p>Откройте навигацию, вызовите помощь, отправьте репорт или проверьте статус заявок — всё в одном месте.</p>
+        </div>
+        <div class="dashboard-hero-actions">
+          <a href="#navigate" class="primary-button">Построить маршрут</a>
+          <a href="#request-help" class="secondary-button">Запросить помощь</a>
+        </div>
+      </div>
+
+      <div class="dashboard-grid" aria-label="Разделы платформы">
+        <a href="#navigate" class="dashboard-card">
+          <span class="dashboard-card-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          </span>
+          <h3>Навигация</h3>
+          <p>Доступные маршруты и автономные подсказки по пути.</p>
+        </a>
+        <a href="#report" class="dashboard-card">
+          <span class="dashboard-card-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h4l2-3h6l2 3h4v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </span>
+          <h3>Репорт проблем</h3>
+          <p>Загрузите фото проблемы и отметьте точку на карте.</p>
+        </a>
+        <a href="#sos" class="dashboard-card dashboard-card-sos">
+          <span class="dashboard-card-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
+          <h3>SOS</h3>
+          <p>Экстренный сигнал помощи с текущим местоположением.</p>
+        </a>
+        <a href="#user-requests" class="dashboard-card">
+          <span class="dashboard-card-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/><path d="M12 7v5l3 3"/></svg>
+          </span>
+          <h3>Мои запросы</h3>
+          <p>Следите за заявками и откликами волонтёров.</p>
+        </a>
+        <a href="#profile" class="dashboard-card">
+          <span class="dashboard-card-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+          </span>
+          <h3>Профиль</h3>
+          <p>Управляйте типом инвалидности и настройками аккаунта.</p>
+        </a>
+      </div>
+    </section>
+
+    <!-- ──── VERIFICATION GATE ──── -->
+    <section class="page hidden" id="page-verification">
+      <div class="verification-gate panel">
+        <div class="hero-kicker">Проверка аккаунта</div>
+        <h2>Сначала завершите верификацию</h2>
+        <p>До подтверждения аккаунта функции платформы временно недоступны.</p>
+        <div class="verification-gate-row">
+          <span id="verificationGateBadge" class="verification-badge not-verified">❌ Не верифицировано</span>
+          <span id="verificationGateReason" class="status status-neutral">Загрузите документ в профиле.</span>
+        </div>
+        <div class="verification-gate-actions">
+          <button id="verificationGoProfileButton" type="button" class="primary-button">Перейти к верификации</button>
+          <a href="#dashboard" class="secondary-button">Назад в дашборд</a>
+        </div>
       </div>
     </section>
 
@@ -159,6 +291,20 @@
           </form>
           <div id="navigationStatus" class="status status-neutral" role="status" aria-live="polite">Введите адреса старта и финиша.</div>
           <div id="routeSummary" class="route-summary hidden"></div>
+          <div id="navGuidancePanel" class="guidance-panel hidden" aria-live="polite">
+            <div class="guidance-label">Текущее указание</div>
+            <div id="navInstructionText" class="guidance-text">Ожидание маршрута...</div>
+            <div class="guidance-meta">
+              <span id="navNextDistanceText">До следующей точки: —</span>
+              <span id="navAssistModeText">Режим: —</span>
+            </div>
+            <div id="navVisualTurnCard" class="nav-visual-turn-card hidden"></div>
+          </div>
+
+          <div class="business-toolbar" style="margin-top:16px;">
+            <button id="businessFilterToggleButton" class="secondary-button" type="button">Показать бизнесы для ОВЗ</button>
+          </div>
+          <div id="businessCardPanel" class="hidden" aria-live="polite"></div>
         </div>
         <div class="panel panel-map">
           <div id="navMap" aria-label="Карта маршрута"></div>
@@ -168,7 +314,12 @@
             <span><i class="legend-dot legend-problem"></i>Проблема</span>
           </div>
           <div id="gpsStatus" class="status status-neutral" role="status" aria-live="polite">Ожидание GPS...</div>
-          <div id="anomalyBanner" class="alert-banner hidden" role="alert">Обнаружена GPS-аномалия. Проверьте маршрут.</div>
+          <div id="anomalyBanner" class="alert-banner hidden" role="alert">
+            <div class="banner-row">
+              <span id="anomalyBannerText">ИИ отправил запрос помощи</span>
+              <button id="dismissAnomalyBannerButton" type="button" class="secondary-button">Закрыть</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -436,6 +587,7 @@
             <div class="profile-avatar" id="profileAvatar">U</div>
             <div class="profile-meta">
               <h3 id="profileDisplayName">Пользователь</h3>
+              <span id="profileVerificationBadge" class="verification-badge not-verified">❌ Не верифицировано</span>
               <span class="profile-email" id="profileDisplayEmail">user@inkomek.kz</span>
             </div>
           </div>
@@ -466,6 +618,16 @@
               Контакт для экстренной связи
               <input id="profileEmergencyContact" type="tel" placeholder="+7 (___) ___-__-__">
             </label>
+
+            <label class="file-upload-label">
+              Загрузить документ об инвалидности
+              <div class="file-upload-area" id="profileDocumentArea">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Нажмите или перетащите фото</span>
+                <span class="file-name" id="profileDocumentFileName"></span>
+              </div>
+              <input id="profileDocument" type="file" accept="image/*" class="sr-only">
+            </label>
             <button type="submit" class="primary-button">Сохранить профиль</button>
           </form>
           <div id="profileStatus" class="status hidden"></div>
@@ -492,6 +654,309 @@
           </div>
           <h3 style="margin-top:24px">Опасная зона</h3>
           <button class="danger-button" id="deleteAccountButton">Удалить аккаунт</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── BUSINESS REGISTER ──── -->
+    <section class="page hidden" id="page-business-register">
+      <div class="page-header">
+        <h2>Регистрация бизнеса</h2>
+      </div>
+
+      <div class="report-layout">
+        <div class="panel">
+          <div class="business-section-intro">
+            <div class="hero-kicker">Листинг для бизнеса</div>
+            <p>Создайте профиль, выберите тариф и покажите ваши услуги людям с инвалидностью прямо на карте InKomek.</p>
+          </div>
+          <form id="businessRegisterForm" class="form-grid">
+            <label>
+              Название бизнеса
+              <input id="businessName" type="text" placeholder="Например: Центр реабилитации «Шаг вперёд»" required>
+            </label>
+
+            <label>
+              Категория
+              <select id="businessCategory" required>
+                <option value="medical_equipment">Медицинское оборудование</option>
+                <option value="rehabilitation_center">Реабилитационный центр</option>
+                <option value="specialized_clinic">Специализированная клиника</option>
+                <option value="accessible_transport">Доступный транспорт</option>
+                <option value="inclusive_sport_fitness">Инклюзивный спорт и фитнес</option>
+                <option value="education_ovz">Обучение и образование для людей с ОВЗ</option>
+                <option value="psychological_support">Психологическая поддержка</option>
+                <option value="accessible_housing">Доступное жильё</option>
+                <option value="other">Другое (с описанием)</option>
+              </select>
+            </label>
+
+            <label>
+              Короткое описание (до 200 символов)
+              <textarea id="businessShortDescription" rows="3" maxlength="200" required placeholder="Чем вы помогаете людям с инвалидностью"></textarea>
+            </label>
+            <div id="businessShortCount" class="status status-neutral" style="margin-top:-6px;">0 / 200</div>
+
+            <label>
+              Телефон
+              <input id="businessPhone" type="tel" placeholder="+7 7__ ___-__-__" required>
+            </label>
+
+            <label>
+              Email
+              <input id="businessEmail" type="email" placeholder="business@example.com" required>
+            </label>
+
+            <label>
+              Адрес
+              <input id="businessAddress" type="text" autocomplete="off" placeholder="Введите адрес (город, улица, дом)" required>
+            </label>
+            <div class="button-row">
+              <button id="businessGeocodeButton" class="secondary-button" type="button">Найти на карте</button>
+              <button id="businessUseMyLocationButton" class="secondary-button" type="button">Моя позиция</button>
+            </div>
+            <input id="businessLat" type="hidden">
+            <input id="businessLon" type="hidden">
+            <div id="businessAddressInfo" class="status status-neutral hidden" role="status" aria-live="polite"></div>
+
+            <label>
+              Сайт (необязательно)
+              <input id="businessWebsite" type="url" placeholder="https://example.com">
+            </label>
+
+            <div>
+              <div style="font-weight:900; margin-bottom:10px;">С какими людьми вы работаете</div>
+              <div class="checkbox-grid" role="group" aria-label="Доступность для ОВЗ">
+                <label class="check-item"><input type="checkbox" id="tagWheelchair"> Инвалидная коляска</label>
+                <label class="check-item"><input type="checkbox" id="tagBlind"> Слепые / слабовидящие</label>
+                <label class="check-item"><input type="checkbox" id="tagDeaf"> Глухие / слабослышащие</label>
+                <label class="check-item"><input type="checkbox" id="tagElderly"> Пожилые</label>
+                <label class="check-item"><input type="checkbox" id="tagCognitive"> Интеллектуальные нарушения / когнитивные</label>
+              </div>
+            </div>
+
+            <label class="file-upload-label">
+              Фото бизнеса
+              <div class="file-upload-area" id="businessPhotoArea">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Загрузите до 5 фото бизнеса</span>
+                <span class="file-name" id="businessPhotoName"></span>
+              </div>
+              <input id="businessPhoto" type="file" accept="image/*" multiple class="sr-only">
+            </label>
+            <div id="businessPhotoLimitHint" class="status status-neutral">Текущий тариф: Стартер. Можно добавить до 1 фото.</div>
+            <div id="businessPhotoPreviewList" class="business-photo-grid"></div>
+
+            <div>
+              <div style="font-weight:900; margin-bottom:10px;">Выберите тариф</div>
+              <div class="business-tier-grid" id="businessTierGrid">
+                <label class="business-tier-card">
+                  <input id="businessTierStarter" type="radio" name="businessTier" value="starter" checked class="sr-only">
+                  <div class="business-tier-card-head">
+                    <div class="business-tier-card-title">Стартер</div>
+                    <div class="business-tier-card-price">$29/month</div>
+                  </div>
+                  <ul class="business-tier-list">
+                    <li>Листинг на карте</li>
+                    <li>Базовый профиль</li>
+                    <li>Неограниченные просмотры</li>
+                    <li>1 фото</li>
+                  </ul>
+                </label>
+                <label class="business-tier-card popular">
+                  <input id="businessTierPro" type="radio" name="businessTier" value="pro" class="sr-only">
+                  <div class="business-tier-card-badge">Популярный</div>
+                  <div class="business-tier-card-head">
+                    <div class="business-tier-card-title">Про</div>
+                    <div class="business-tier-card-price">$79/month</div>
+                  </div>
+                  <ul class="business-tier-list">
+                    <li>Всё из Стартера</li>
+                    <li>Accessibility Badge ✅</li>
+                    <li>До 5 фото + видео тур</li>
+                    <li>Аналитика и статистика</li>
+                    <li>Приоритет в поиске</li>
+                    <li>Построить маршрут к нам</li>
+                  </ul>
+                </label>
+                <label class="business-tier-card featured">
+                  <input id="businessTierPremium" type="radio" name="businessTier" value="premium" class="sr-only">
+                  <div class="business-tier-card-head">
+                    <div class="business-tier-card-title">Премиум</div>
+                    <div class="business-tier-card-price">$199/month</div>
+                  </div>
+                  <ul class="business-tier-list">
+                    <li>Всё из Про</li>
+                    <li>Виджет на сайт бизнеса</li>
+                    <li>API доступ</li>
+                    <li>ESG отчёт</li>
+                    <li>Dedicated менеджер</li>
+                    <li>Featured место на карте</li>
+                  </ul>
+                </label>
+              </div>
+            </div>
+
+            <button id="businessRegisterSubmit" type="submit" class="primary-button">Создать профиль бизнеса</button>
+          </form>
+          <div id="businessRegisterStatus" class="status hidden" role="status" aria-live="polite"></div>
+        </div>
+
+        <div class="panel panel-map">
+          <div id="businessRegMap" aria-label="Карта бизнеса"></div>
+          <div class="map-legend">
+            <span><i class="legend-dot legend-user"></i>Метка адреса</span>
+          </div>
+          <div id="businessTierSummary" class="business-tier-summary-card">
+            <div class="business-tier-summary-title">Выбранный тариф</div>
+            <div id="businessTierSummaryName" class="business-tier-summary-name">Стартер</div>
+            <div id="businessTierSummaryText" class="business-tier-summary-text">Листинг на карте, базовый профиль и 1 фото.</div>
+          </div>
+          <div id="businessRegGpsStatus" class="status status-neutral hidden" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── BUSINESS DASHBOARD ──── -->
+    <section class="page hidden" id="page-business-dashboard">
+      <div class="page-header">
+        <h2>Кабинет бизнеса</h2>
+      </div>
+
+      <div class="business-dashboard-top">
+        <div class="panel">
+          <div class="business-dashboard-head">
+            <div>
+              <div class="hero-kicker">Профиль бизнеса</div>
+              <h3 id="businessDashboardName">Ваш бизнес</h3>
+              <div class="business-dashboard-badges">
+                <span id="businessDashboardTierBadge" class="business-tier-pill">Стартер</span>
+                <span id="businessVerificationBadge" class="verification-badge under">🟡 На проверке</span>
+              </div>
+              <p id="businessDashboardPlanText" class="business-dashboard-plan-text">Листинг на карте и базовый профиль.</p>
+            </div>
+            <div id="businessUpgradeWrap" class="business-upgrade-wrap"></div>
+          </div>
+
+          <div class="business-metrics-grid">
+            <div class="business-metric-card">
+              <div class="business-metric-label">Просмотры за неделю</div>
+              <div id="businessAnalyticsViewsWeek" class="business-metric-value">0</div>
+            </div>
+            <div class="business-metric-card">
+              <div class="business-metric-label">Запросы маршрута</div>
+              <div id="businessAnalyticsRouteRequests" class="business-metric-value">0</div>
+            </div>
+            <div class="business-metric-card">
+              <div class="business-metric-label">Клики по профилю</div>
+              <div id="businessAnalyticsClicks" class="business-metric-value">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="report-layout">
+        <div class="panel">
+          <form id="businessEditForm" class="form-grid">
+            <label>
+              Название бизнеса
+              <input id="businessEditName" type="text" required>
+            </label>
+
+            <label>
+              Категория
+              <select id="businessEditCategory" required>
+                <option value="medical_equipment">Медицинское оборудование</option>
+                <option value="rehabilitation_center">Реабилитационный центр</option>
+                <option value="specialized_clinic">Специализированная клиника</option>
+                <option value="accessible_transport">Доступный транспорт</option>
+                <option value="inclusive_sport_fitness">Инклюзивный спорт и фитнес</option>
+                <option value="education_ovz">Обучение и образование для людей с ОВЗ</option>
+                <option value="psychological_support">Психологическая поддержка</option>
+                <option value="accessible_housing">Доступное жильё</option>
+                <option value="other">Другое (с описанием)</option>
+              </select>
+            </label>
+
+            <label>
+              Описание (до 200 символов)
+              <textarea id="businessEditShortDescription" rows="3" maxlength="200" required></textarea>
+            </label>
+            <div id="businessEditShortCount" class="status status-neutral" style="margin-top:-6px;">0 / 200</div>
+
+            <label>
+              Телефон
+              <input id="businessEditPhone" type="tel" required>
+            </label>
+
+            <label>
+              Email
+              <input id="businessEditEmail" type="email" required>
+            </label>
+
+            <label>
+              Адрес
+              <input id="businessEditAddress" type="text" autocomplete="off" required>
+            </label>
+            <div class="button-row">
+              <button id="businessEditGeocodeButton" class="secondary-button" type="button">Найти на карте</button>
+              <button id="businessEditUseMyLocationButton" class="secondary-button" type="button">Моя позиция</button>
+            </div>
+            <input id="businessEditLat" type="hidden">
+            <input id="businessEditLon" type="hidden">
+            <div id="businessEditAddressInfo" class="status status-neutral hidden" role="status" aria-live="polite"></div>
+
+            <label>
+              Сайт (необязательно)
+              <input id="businessEditWebsite" type="url">
+            </label>
+
+            <div>
+              <div style="font-weight:900; margin-bottom:10px;">С какими людьми вы работаете</div>
+              <div class="checkbox-grid" role="group" aria-label="Доступность для ОВЗ">
+                <label class="check-item"><input type="checkbox" id="tagEditWheelchair"> Инвалидная коляска</label>
+                <label class="check-item"><input type="checkbox" id="tagEditBlind"> Слепые / слабовидящие</label>
+                <label class="check-item"><input type="checkbox" id="tagEditDeaf"> Глухие / слабослышащие</label>
+                <label class="check-item"><input type="checkbox" id="tagEditElderly"> Пожилые</label>
+                <label class="check-item"><input type="checkbox" id="tagEditCognitive"> Интеллектуальные нарушения / когнитивные</label>
+              </div>
+            </div>
+
+            <label class="file-upload-label">
+              Документ для верификации бизнеса
+              <div class="file-upload-area" id="businessVerificationArea">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6"/><path d="M9 11h6"/><path d="M9 19h4"/></svg>
+                <span>Загрузите документ для бейджа верификации</span>
+                <span class="file-name" id="businessVerificationFileName"></span>
+              </div>
+              <input id="businessVerificationDocument" type="file" accept="image/*,.pdf" class="sr-only">
+            </label>
+
+            <button id="businessEditSubmit" type="submit" class="primary-button">Сохранить изменения</button>
+          </form>
+
+          <div id="businessEditStatus" class="status hidden" role="status" aria-live="polite"></div>
+        </div>
+
+        <div class="panel panel-map">
+          <div id="businessDashMap" aria-label="Карта бизнеса (редактирование)"></div>
+          <div class="business-gallery-toolbar">
+            <div>
+              <div class="business-tier-summary-title">Фотогалерея</div>
+              <div id="businessGalleryLimitText" class="business-tier-summary-text">Доступно 0 / 0 фото</div>
+            </div>
+            <div class="business-gallery-actions">
+              <button id="businessAddPhotosButton" type="button" class="secondary-button">Добавить фото</button>
+              <input id="businessAddPhotos" type="file" accept="image/*" multiple class="sr-only">
+            </div>
+          </div>
+          <div id="businessGalleryStatus" class="status hidden" role="status" aria-live="polite"></div>
+          <div id="businessGalleryList" class="business-photo-grid"></div>
+
+          <div class="business-preview-card">
+            <div class="business-tier-summary-title">Предпросмотр листинга</div>
+            <div id="businessListingPreview"></div>
+          </div>
         </div>
       </div>
     </section>

@@ -1,17 +1,18 @@
-﻿/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    CONSTANTS
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
-const BASE_URL = `${window.location.protocol}//${window.location.hostname || "127.0.0.1"}:8000`;
-const AUTH_BASE_URL = `${window.location.protocol}//${window.location.hostname || "127.0.0.1"}:8002`;
-const AUTH_TOKEN_KEY = "inkomek-auth-token";
+   ═══════════════════════════════════════ */
+const BASE_URL = "http://127.0.0.1:61750";
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const LOCAL_USER_ID = "local_user";
 const GPS_INTERVAL_MS = 30_000;
 const DEFAULT_CENTER = [43.238949, 76.889709];
 const DEFAULT_DESTINATION = [43.246998, 76.923778];
+const ACTIVE_NAV_HISTORY_KEY = "inkomek-auto-reports";
 
 const PAGES = [
   "home",
+  "dashboard",
+  "verification",
   "navigate",
   "report",
   "sos",
@@ -28,9 +29,28 @@ const PAGES = [
   "business-dashboard",
 ];
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+const PROTECTED_USER_PAGES = new Set([
+  "dashboard",
+  "verification",
+  "navigate",
+  "report",
+  "sos",
+  "profile",
+  "request-help",
+  "user-requests",
+]);
+
+const VERIFICATION_REQUIRED_PAGES = new Set([
+  "navigate",
+  "report",
+  "sos",
+  "request-help",
+  "user-requests",
+]);
+
+/* ═══════════════════════════════════════
    STATE
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 const state = {
   currentPage: "home",
   currentLocation: null,
@@ -77,31 +97,74 @@ const state = {
   businessCardBusinessId: null,
   businessFilterOvzOnly: false,
 
-  businessRegisterPhotoDataUrl: null,
-  businessEditPhotoDataUrl: null,
+  businessRegisterPhotos: [],
+  businessPendingVerificationFileName: "",
+
+  // Active autonomous navigation
+  activeRouteCoords: [],
+  activeRouteMeta: [],
+  activeRouteUserType: null,
+  activeRouteDisplayType: null,
+  activeRouteDestination: null,
+  activeNavRunning: false,
+  activeNavLocationTimer: null,
+  activeNavGuidanceTimer: null,
+  activeNavAnomalyTimer: null,
+  activeNavLastInstruction: "",
+  activeNavLastSpokenAt: 0,
+  activeNavProgressIndex: 0,
+  activeNavWaypointMarkers: [],
+  activeNavAuxMarkers: [],
+  activeNavArrowMarkers: [],
+  activeNavOffRouteSince: null,
+  activeNavLastAnomalyCheckAt: 0,
+  activeNavAnomalySince: null,
+  activeNavLastAnomalyResponse: null,
 };
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    BOOT
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 document.addEventListener("DOMContentLoaded", () => {
   registerServiceWorker();
   bindGlobalEvents();
   syncAuthUI();
   syncVolunteerAuthUI();
-  restoreAuthSession();
   handleHashChange();
   window.addEventListener("hashchange", handleHashChange);
 });
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    ROUTER
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function handleHashChange() {
   const raw = (location.hash || "#home").slice(1);
   let page = raw === "map" ? "navigate" : (PAGES.includes(raw) ? raw : "home");
 
-  // Volunteer guard: Р›РµРЅС‚Р° РІРѕР»РѕРЅС‚С‘СЂР° РґРѕСЃС‚СѓРїРЅР° С‚олько после входа
+  if (PROTECTED_USER_PAGES.has(page) && !state.user) {
+    location.hash = "#signin";
+    return;
+  }
+
+  // Authenticated users should not see the guest landing page.
+  if (page === "home" && state.user) {
+    location.hash = "#dashboard";
+    return;
+  }
+
+  // Verification gate: user can access core features only after verification.
+  if (state.user && !isUserVerified(state.user) && VERIFICATION_REQUIRED_PAGES.has(page)) {
+    location.hash = "#verification";
+    return;
+  }
+
+  // Verified users don't need to stay on verification page.
+  if (state.user && isUserVerified(state.user) && page === "verification") {
+    location.hash = "#dashboard";
+    return;
+  }
+
+  // Volunteer guard: Лента волонтёра доступна только после входа
   if (page === "volunteer-home" && !state.volunteer) page = "volunteer-signin";
 
   for (const p of PAGES) {
@@ -118,8 +181,10 @@ function handleHashChange() {
 
   if (page !== "volunteer-home") stopVolunteerPolling();
   if (page !== "user-requests") stopUserRequestsPolling();
+  if (page !== "navigate") stopActiveNavigationSession();
   if (page === "navigate") initNavMap();
   if (page === "report") initReportMap();
+  if (page === "verification") hydrateVerificationPage();
   if (page === "profile") hydrateProfile();
   if (page === "request-help") hydrateRequestHelp();
   if (page === "user-requests") initUserRequestsPage();
@@ -131,13 +196,51 @@ function handleHashChange() {
   window.scrollTo({ top: 0 });
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+function isUserVerified(user) {
+  return deriveVerificationUi(user).statusKey === "verified";
+}
+
+function hydrateVerificationPage() {
+  if (!state.user) {
+    location.hash = "#signin";
+    return;
+  }
+
+  const badgeEl = document.getElementById("verificationGateBadge");
+  const reasonEl = document.getElementById("verificationGateReason");
+  const ctaEl = document.getElementById("verificationGoProfileButton");
+  if (badgeEl) applyVerificationBadgeToEl(badgeEl, state.user);
+
+  const ui = deriveVerificationUi(state.user);
+  const reason = state.user?.verificationReason || "";
+  if (reasonEl) {
+    if (ui.statusKey === "verified") {
+      reasonEl.textContent = "Ваш профиль подтверждён. Доступ ко всем функциям открыт.";
+    } else if (reason) {
+      reasonEl.textContent = `Причина: ${reason}`;
+    } else {
+      reasonEl.textContent = "Загрузите документ в профиле, чтобы разблокировать маршруты, SOS, репорты и запрос помощи.";
+    }
+  }
+
+  if (ctaEl) {
+    ctaEl.onclick = () => {
+      location.hash = "#profile";
+    };
+  }
+}
+
+/* ═══════════════════════════════════════
    GLOBAL EVENT BINDING
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function bindGlobalEvents() {
   const $ = (id) => document.getElementById(id);
 
   $("hamburger").addEventListener("click", toggleMenu);
+  $("navBackdrop")?.addEventListener("click", closeMenu);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenu();
+  });
 
   // Home role entry
   $("roleUserButton")?.addEventListener("click", (e) => {
@@ -166,6 +269,9 @@ function bindGlobalEvents() {
   $("navigationForm")?.addEventListener("submit", handleNavigateSubmit);
   $("useCurrentLocationButton")?.addEventListener("click", populateStartFromCurrentLocation);
   $("refreshLocationButton")?.addEventListener("click", () => refreshCurrentLocation({ centerMap: true, silent: false }));
+  $("dismissAnomalyBannerButton")?.addEventListener("click", () => {
+    document.getElementById("anomalyBanner")?.classList.add("hidden");
+  });
   $("reportForm")?.addEventListener("submit", handleReportSubmit);
   $("sosButton")?.addEventListener("click", handleSosPress);
   $("logoutButton")?.addEventListener("click", handleLogout);
@@ -260,26 +366,9 @@ function bindGlobalEvents() {
   });
   $("businessUseMyLocationButton")?.addEventListener("click", () => useMyLocationForRegBusiness());
   $("businessRegisterForm")?.addEventListener("submit", handleBusinessRegisterSubmit);
-  $("businessPhoto")?.addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    const nameEl = document.getElementById("businessPhotoName");
-    if (nameEl) nameEl.textContent = file?.name || "";
-    if (!file) {
-      state.businessRegisterPhotoDataUrl = null;
-      return;
-    }
-
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(fr.result);
-        fr.onerror = () => reject(new Error("file read error"));
-        fr.readAsDataURL(file);
-      });
-      state.businessRegisterPhotoDataUrl = dataUrl;
-    } catch {
-      state.businessRegisterPhotoDataUrl = null;
-    }
+  $("businessPhoto")?.addEventListener("change", handleBusinessRegisterPhotosChange);
+  document.querySelectorAll('input[name="businessTier"]').forEach((input) => {
+    input.addEventListener("change", syncBusinessTierSelectionUi);
   });
 
   // Businesses: dashboard edit
@@ -290,59 +379,105 @@ function bindGlobalEvents() {
   });
   $("businessEditUseMyLocationButton")?.addEventListener("click", () => useMyLocationForDashBusiness());
   $("businessEditForm")?.addEventListener("submit", handleBusinessEditSubmit);
+  $("businessAddPhotosButton")?.addEventListener("click", () => document.getElementById("businessAddPhotos")?.click());
+  $("businessAddPhotos")?.addEventListener("change", handleBusinessGalleryAddPhotos);
+  $("businessVerificationDocument")?.addEventListener("change", handleBusinessVerificationDocumentChange);
+
+  // Pricing buttons (local-only)
+  document.addEventListener("click", (e) => {
+    const planBtn = e.target.closest?.("[data-business-plan-cta]");
+    if (planBtn) {
+      const plan = planBtn.getAttribute("data-business-plan-cta") || "starter";
+      localStorage.setItem("inkomek-selected-business-plan", JSON.stringify(plan));
+      location.hash = "#business-register";
+      return;
+    }
+
+    const routeBtn = e.target.closest?.("[data-business-route-to-inkomek]");
+    if (routeBtn) {
+      prefillNavigateToInkomek();
+      return;
+    }
+
+    const upgradeBtn = e.target.closest?.("[data-business-upgrade]");
+    if (upgradeBtn) {
+      handleBusinessUpgrade(upgradeBtn.getAttribute("data-business-upgrade"));
+      return;
+    }
+
+    const removePhotoBtn = e.target.closest?.("[data-business-photo-remove]");
+    if (removePhotoBtn) {
+      handleBusinessRemovePhoto(removePhotoBtn.getAttribute("data-business-photo-remove"));
+    }
+  });
 
   loadSettings();
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    NAVBAR
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function toggleMenu() {
   const btn = document.getElementById("hamburger");
   const links = document.getElementById("navLinks");
-  btn.classList.toggle("open");
-  links.classList.toggle("open");
+  const backdrop = document.getElementById("navBackdrop");
+  const nextOpen = !links.classList.contains("open");
+  btn.classList.toggle("open", nextOpen);
+  links.classList.toggle("open", nextOpen);
+  backdrop?.classList.toggle("open", nextOpen);
+  btn?.setAttribute("aria-expanded", nextOpen ? "true" : "false");
 }
 
 function closeMenu() {
-  document.getElementById("hamburger")?.classList.remove("open");
+  const btn = document.getElementById("hamburger");
   document.getElementById("navLinks")?.classList.remove("open");
+  document.getElementById("navBackdrop")?.classList.remove("open");
+  btn?.classList.remove("open");
+  btn?.setAttribute("aria-expanded", "false");
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
-   AUTH (backend JWT)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
-async function handleSignIn(e) {
+/* ═══════════════════════════════════════
+   AUTH (local-only, no backend)
+   ═══════════════════════════════════════ */
+function handleSignIn(e) {
   e.preventDefault();
   const email = document.getElementById("signinEmail").value.trim();
   const password = document.getElementById("signinPassword").value;
   const statusEl = document.getElementById("signinStatus");
 
   if (!email || password.length < 6) {
-    showStatus(statusEl, "Заполните все поля (пароль минимум 6 символов).", "error");
+    showStatus(statusEl, "Заполните все поля (пароль мин. 6 символов).", "error");
     return;
   }
 
-  try {
-    const loginResp = await fetchJson("/login", {
-      method: "POST",
-      baseUrl: AUTH_BASE_URL,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const token = loginResp?.access_token;
-    if (!token) throw new Error("Login did not return token");
-    persistAuthToken(token);
-    await hydrateUserProfileFromBackend();
-    syncAuthUI();
-    showStatus(statusEl, "Вы вошли!", "success");
-    setTimeout(() => (location.hash = "#home"), 300);
-  } catch (err) {
-    showStatus(statusEl, extractError(err, "Ошибка входа."), "error");
+  const stored = JSON.parse(localStorage.getItem("inkomek-users") || "{}");
+  const user = stored[email];
+
+  if (!user || user.password !== password) {
+    showStatus(statusEl, "Неверный email или пароль.", "error");
+    return;
   }
+
+  const existingUser = loadUser();
+  state.user = {
+    name: user.name,
+    email,
+    phone: user.phone || "",
+    disability: user.disability || user.disability_type || "",
+    disability_type: user.disability_type || user.disability || "",
+    emergencyContact: user.emergencyContact || "",
+  };
+  // Preserve document verification state if it exists for this user.
+  if (existingUser && existingUser.email === email) {
+    state.user = { ...state.user, ...existingUser };
+  }
+  persistUser();
+  syncAuthUI();
+  showStatus(statusEl, "Вы вошли!", "success");
+  setTimeout(() => (location.hash = "#dashboard"), 600);
 }
 
-async function handleSignUp(e) {
+function handleSignUp(e) {
   e.preventDefault();
   const name = document.getElementById("signupName").value.trim();
   const email = document.getElementById("signupEmail").value.trim();
@@ -356,33 +491,26 @@ async function handleSignUp(e) {
     showStatus(statusEl, "Заполните обязательные поля.", "error");
     return;
   }
+
   if (password !== confirm) {
     showStatus(statusEl, "Пароли не совпадают.", "error");
     return;
   }
 
-  try {
-    const registerResp = await fetchJson("/register", {
-      method: "POST",
-      baseUrl: AUTH_BASE_URL,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        email,
-        password,
-        type_of_disability: normalizeDisabilityType(disability),
-      }),
-    });
-    const token = registerResp?.access_token;
-    if (!token) throw new Error("Register did not return token");
-    persistAuthToken(token);
-    await hydrateUserProfileFromBackend({ nameFallback: name, phoneFallback: phone, disabilityFallback: disability });
-    syncAuthUI();
-    showStatus(statusEl, "Аккаунт создан!", "success");
-    setTimeout(() => (location.hash = "#home"), 300);
-  } catch (err) {
-    showStatus(statusEl, extractError(err, "Ошибка регистрации."), "error");
+  const stored = JSON.parse(localStorage.getItem("inkomek-users") || "{}");
+  if (stored[email]) {
+    showStatus(statusEl, "Этот email уже зарегистрирован.", "error");
+    return;
   }
+
+  stored[email] = { name, password, phone, disability, disability_type: disability };
+  localStorage.setItem("inkomek-users", JSON.stringify(stored));
+
+  state.user = { name, email, phone, disability, disability_type: disability, emergencyContact: "" };
+  persistUser();
+  syncAuthUI();
+  showStatus(statusEl, "Аккаунт создан!", "success");
+  setTimeout(() => (location.hash = "#dashboard"), 600);
 }
 
 function handleForgotPassword(e) {
@@ -395,12 +523,11 @@ function handleForgotPassword(e) {
     return;
   }
 
-  showStatus(statusEl, "Сброс пароля делается через backend auth-поток.", "neutral");
+  showStatus(statusEl, "Ссылка для сброса отправлена (демо-режим).", "success");
 }
 
 function handleLogout() {
   state.user = null;
-  clearAuthToken();
   localStorage.removeItem("inkomek-user");
   syncAuthUI();
   location.hash = "#home";
@@ -408,8 +535,19 @@ function handleLogout() {
 
 function handleDeleteAccount() {
   if (!state.user) return;
-  if (!confirm("Вы уверены? Вы выйдете из аккаунта в текущем браузере.")) return;
+  if (!confirm("Вы уверены? Это действие нельзя отменить.")) return;
+
+  const stored = JSON.parse(localStorage.getItem("inkomek-users") || "{}");
+  delete stored[state.user.email];
+  localStorage.setItem("inkomek-users", JSON.stringify(stored));
   handleLogout();
+}
+
+function updateNavbarVisibility() {
+  const navbar = document.getElementById("navbar");
+  const hasSession = Boolean(state.user || state.volunteer);
+  if (navbar) navbar.classList.toggle("hidden", !hasSession);
+  document.body.classList.toggle("guest-no-navbar", !hasSession);
 }
 
 function syncAuthUI() {
@@ -418,6 +556,8 @@ function syncAuthUI() {
   const avatarEl = document.getElementById("navAvatarInitial");
   const navUserNameEl = document.getElementById("navUserName");
   const navBadgeEl = document.getElementById("navVerificationBadge");
+  const navHomeLink = document.getElementById("navHomeLink");
+  const navBrandLink = document.getElementById("navBrandLink");
 
   if (state.user) {
     authBlock?.classList.add("hidden");
@@ -425,54 +565,29 @@ function syncAuthUI() {
     if (avatarEl) avatarEl.textContent = (state.user.name || "U").charAt(0).toUpperCase();
     if (navUserNameEl) navUserNameEl.textContent = state.user.name || "Пользователь";
     if (navBadgeEl) applyVerificationBadgeToEl(navBadgeEl, state.user);
+    if (navHomeLink) {
+      navHomeLink.setAttribute("href", "#dashboard");
+      navHomeLink.dataset.page = "dashboard";
+    }
+    if (navBrandLink) navBrandLink.setAttribute("href", "#dashboard");
   } else {
     authBlock?.classList.remove("hidden");
     userBlock?.classList.add("hidden");
+    if (navHomeLink) {
+      navHomeLink.setAttribute("href", "#home");
+      navHomeLink.dataset.page = "home";
+    }
+    if (navBrandLink) navBrandLink.setAttribute("href", "#home");
   }
+  updateNavbarVisibility();
 }
 
 function persistUser() { localStorage.setItem("inkomek-user", JSON.stringify(state.user)); }
 function loadUser() { try { return JSON.parse(localStorage.getItem("inkomek-user")); } catch { return null; } }
-function persistAuthToken(token) { localStorage.setItem(AUTH_TOKEN_KEY, token); }
-function loadAuthToken() { return localStorage.getItem(AUTH_TOKEN_KEY) || ""; }
-function clearAuthToken() { localStorage.removeItem(AUTH_TOKEN_KEY); }
 
-function normalizeDisabilityType(type) {
-  if (type === "wheelchair" || type === "blind" || type === "elderly") return type;
-  return "elderly";
-}
-
-async function restoreAuthSession() {
-  const token = loadAuthToken();
-  if (!token) return;
-  try {
-    await hydrateUserProfileFromBackend();
-    syncAuthUI();
-  } catch (_) {
-    clearAuthToken();
-    state.user = null;
-    persistUser();
-    syncAuthUI();
-  }
-}
-
-async function hydrateUserProfileFromBackend(fallback = {}) {
-  const profile = await fetchJson("/me", { method: "GET", baseUrl: AUTH_BASE_URL });
-  const existingUser = loadUser() || {};
-  state.user = {
-    ...existingUser,
-    name: profile?.name || fallback.nameFallback || existingUser.name || "",
-    email: profile?.email || existingUser.email || "",
-    phone: existingUser.phone || fallback.phoneFallback || "",
-    disability: profile?.type_of_disability || fallback.disabilityFallback || existingUser.disability || "wheelchair",
-    emergencyContact: existingUser.emergencyContact || "",
-  };
-  persistUser();
-}
-
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    VOLUNTEER (local-only)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 const VOLUNTEER_PROFILES_KEY = "inkomek-volunteers";
 const VOLUNTEER_SESSION_KEY = "inkomek-volunteer-session";
 const VOLUNTEER_STATUS_KEY = "inkomek-volunteer-status";
@@ -482,6 +597,109 @@ const LOCAL_BROWSER_ID_KEY = "inkomek-local-browser-id";
 
 const BUSINESSES_KEY = "inkomek-businesses";
 const BUSINESS_SESSION_KEY = "inkomek-business-session";
+const BUSINESS_PLAN_SELECTION_KEY = "inkomek-selected-business-plan";
+
+const BUSINESS_TIER_META = {
+  starter: {
+    label: "Стартер",
+    price: "$29/month",
+    photoLimit: 1,
+    description: "Листинг на карте, базовый профиль и неограниченные просмотры.",
+  },
+  pro: {
+    label: "Про",
+    price: "$79/month",
+    photoLimit: 5,
+    description: "Accessibility Badge, аналитика, приоритет в поиске и кнопка маршрута.",
+  },
+  premium: {
+    label: "Премиум",
+    price: "$199/month",
+    photoLimit: 5,
+    description: "Featured-размещение, API доступ, ESG отчёт и выделенный менеджер.",
+  },
+};
+
+function getBusinessTierMeta(tier) {
+  return BUSINESS_TIER_META[tier] || BUSINESS_TIER_META.starter;
+}
+
+function getBusinessPhotoLimit(tier) {
+  return Number(getBusinessTierMeta(tier).photoLimit || 1);
+}
+
+function getSelectedBusinessPlan() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BUSINESS_PLAN_SELECTION_KEY) || "\"starter\"");
+    return BUSINESS_TIER_META[raw] ? raw : "starter";
+  } catch {
+    return "starter";
+  }
+}
+
+function setSelectedBusinessPlan(plan) {
+  const next = BUSINESS_TIER_META[plan] ? plan : "starter";
+  localStorage.setItem(BUSINESS_PLAN_SELECTION_KEY, JSON.stringify(next));
+  return next;
+}
+
+function hashString(value) {
+  let hash = 0;
+  const text = String(value || "");
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function seededMetric(seed, min, max) {
+  const span = Math.max(max - min, 1);
+  return min + (hashString(seed) % (span + 1));
+}
+
+function buildBusinessAnalytics(id) {
+  return {
+    viewsWeek: seededMetric(`${id}:views`, 110, 920),
+    routeRequests: seededMetric(`${id}:routes`, 9, 140),
+    clicks: seededMetric(`${id}:clicks`, 20, 240),
+  };
+}
+
+function normalizeBusiness(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const tier = BUSINESS_TIER_META[raw.subscriptionTier] ? raw.subscriptionTier : "starter";
+  const photos = Array.isArray(raw.photos)
+    ? raw.photos.filter((item) => typeof item === "string" && item)
+    : raw.photoDataUrl
+      ? [raw.photoDataUrl]
+      : [];
+  return {
+    ...raw,
+    subscriptionTier: tier,
+    email: raw.email || "",
+    website: raw.website || "",
+    photos: photos.slice(0, getBusinessPhotoLimit(tier)),
+    analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : buildBusinessAnalytics(raw.id || Date.now()),
+    verificationStatus: raw.verificationStatus === "verified" || raw.verificationStatus === "not-verified" ? raw.verificationStatus : "under",
+    verificationDocumentName: raw.verificationDocumentName || "",
+    verificationReason: raw.verificationReason || "",
+  };
+}
+
+function getBusinessVerificationUi(business) {
+  const status = business?.verificationStatus || "under";
+  if (status === "verified") return { text: "✅ Верифицирован", className: "verified" };
+  if (status === "not-verified") return { text: "❌ Не верифицировано", className: "not-verified" };
+  return { text: "🟡 На проверке", className: "under" };
+}
+
+function applyBusinessVerificationBadge(el, business) {
+  if (!el) return;
+  const ui = getBusinessVerificationUi(business);
+  el.classList.remove("verified", "under", "not-verified");
+  el.classList.add(ui.className);
+  el.textContent = ui.text;
+}
 
 function getLocalBrowserId() {
   let id = localStorage.getItem(LOCAL_BROWSER_ID_KEY);
@@ -553,7 +771,7 @@ function persistHelpRequests(list) {
 function loadBusinesses() {
   try {
     const raw = JSON.parse(localStorage.getItem(BUSINESSES_KEY) || "[]");
-    return Array.isArray(raw) ? raw : [];
+    return Array.isArray(raw) ? raw.map(normalizeBusiness).filter(Boolean) : [];
   } catch {
     return [];
   }
@@ -579,23 +797,24 @@ function getBusinessById(businessId) {
 
 function upsertBusiness(business) {
   const list = loadBusinesses();
-  const idx = list.findIndex((b) => b.id === business.id);
-  if (idx >= 0) list[idx] = business;
-  else list.push(business);
+  const normalized = normalizeBusiness(business);
+  const idx = list.findIndex((b) => b.id === normalized.id);
+  if (idx >= 0) list[idx] = normalized;
+  else list.push(normalized);
   persistBusinesses(list);
-  return business;
+  return normalized;
 }
 
 function categoryLabel(categoryKey) {
   const map = {
-    medical_equipment: "РњРµРґРёС†инское оборудование",
-    rehabilitation_center: "Р РµР°Р±РёР»РёС‚Р°С†РёРѕРЅРЅС‹Р№ С†РµРЅС‚р",
-    specialized_clinic: "РЎРїРµС†иализированная клиника",
-    accessible_transport: "Р”РѕСЃС‚СѓРїРЅС‹Р№ С‚СЂР°РЅСЃРїРѕСЂС‚",
-    inclusive_sport_fitness: "РРЅРєР»СЋР·РёРІРЅС‹Р№ СЃРїРѕСЂС‚ Рё С„РёС‚нес",
-    education_ovz: "РћР±СѓС‡ение и образование для людей с ОВЗ",
-    psychological_support: "РџСЃРёС…РѕР»РѕРіРёС‡еская поддержка",
-    accessible_housing: "Р”РѕСЃС‚упное жильё",
+    medical_equipment: "Медицинское оборудование",
+    rehabilitation_center: "Реабилитационный центр",
+    specialized_clinic: "Специализированная клиника",
+    accessible_transport: "Доступный транспорт",
+    inclusive_sport_fitness: "Инклюзивный спорт и фитнес",
+    education_ovz: "Обучение и образование для людей с ОВЗ",
+    psychological_support: "Психологическая поддержка",
+    accessible_housing: "Доступное жильё",
     other: "Другое",
   };
   return map[categoryKey] || categoryKey || "Другое";
@@ -603,11 +822,11 @@ function categoryLabel(categoryKey) {
 
 function businessTagsLabel(tagKey) {
   const map = {
-    wheelchair: "Рнвалидная коляска",
-    blind: "РЎР»РµРїС‹Рµ / СЃР»Р°Р±РѕРІРёРґСЏС‰ие",
-    deaf: "Р“Р»СѓС…РёРµ / СЃР»Р°Р±РѕСЃР»С‹С€Р°С‰ие",
-    elderly: "РџРѕР¶РёР»С‹е",
-    cognitive: "РРЅС‚РµР»Р»РµРєС‚СѓР°Р»СЊРЅС‹Рµ РЅР°СЂСѓС€РµРЅРёСЏ / РєРѕРіРЅРёС‚РёРІРЅС‹е",
+    wheelchair: "Инвалидная коляска",
+    blind: "Слепые / слабовидящие",
+    deaf: "Глухие / слабослышащие",
+    elderly: "Пожилые",
+    cognitive: "Интеллектуальные нарушения / когнитивные",
   };
   return map[tagKey] || tagKey;
 }
@@ -632,7 +851,7 @@ function ensureMockHelpRequests() {
       id: `mock_${now}_1`,
       type: "wheelchair",
       location: [43.255, 76.93],
-      note: "РќСѓР¶РЅР° РїРѕРјРѕС‰ь с передвижением и сопровождением.",
+      note: "Нужна помощь с передвижением и сопровождением.",
       postedAt: now - 12 * 60_000,
       requester: { name: "Айгерим", phone: "+7 777 123 45 67" },
       status: "open",
@@ -642,9 +861,9 @@ function ensureMockHelpRequests() {
       id: `mock_${now}_2`,
       type: "blind",
       location: [43.2415, 76.9482],
-      note: "РџРѕРјРѕС‡СЊ СЃ РѕСЂРёРµРЅС‚РёСЂРѕРІР°РЅРёРµРј Рё РїРµСЂРµС…РѕРґРѕРј С‡ерез дорогу.",
+      note: "Помочь с ориентированием и переходом через дорогу.",
       postedAt: now - 33 * 60_000,
-      requester: { name: "РњР°СЂР°С‚", phone: "+7 701 234 56 78" },
+      requester: { name: "Марат", phone: "+7 701 234 56 78" },
       status: "open",
       acceptedByPhone: null,
     },
@@ -652,7 +871,7 @@ function ensureMockHelpRequests() {
       id: `mock_${now}_3`,
       type: "elderly",
       location: [43.2312, 76.905],
-      note: "РџРѕРјРѕС‡СЊ РґРѕР№С‚Рё РґРѕ Р°РїС‚еки и сумок.",
+      note: "Помочь дойти до аптеки и сумок.",
       postedAt: now - 5 * 60_000,
       requester: { name: "Сауле", phone: "+7 705 333 44 55" },
       status: "open",
@@ -662,9 +881,9 @@ function ensureMockHelpRequests() {
       id: `mock_${now}_4`,
       type: "deaf",
       location: [43.246, 76.8885],
-      note: "РЎРѕРїСЂРѕРІРѕР¶РґРµРЅРёРµ Рё РїРѕРјРѕС‰СЊ СЃ РєРѕРјРјСѓРЅРёРєР°С†ией.",
+      note: "Сопровождение и помощь с коммуникацией.",
       postedAt: now - 48 * 60_000,
-      requester: { name: "Р•рлан", phone: "+7 771 987 65 43" },
+      requester: { name: "Ерлан", phone: "+7 771 987 65 43" },
       status: "open",
       acceptedByPhone: null,
     },
@@ -702,9 +921,9 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    REQUEST HELP (USER -> localStorage)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 async function hydrateRequestHelp() {
   const statusEl = document.getElementById("requestHelpLocationText");
   const wrapStatusEl = document.getElementById("requestHelpStatus");
@@ -764,15 +983,15 @@ function handleRequestHelpSubmit(e) {
   persistHelpRequests(list);
 
   if (form) form.reset();
-  showStatus(statusEl, "Запрос отправлен. Волонтеры увидят его в своей ленте.", "success");
+  showStatus(statusEl, "Запрос отправлен. Волонтёры увидят его в своей ленте.", "success");
 
   // subtle delay for screen readers
   setTimeout(() => (location.hash = "#user-requests"), 900);
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    USER REQUESTS PAGE (volunteer services)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function stopUserRequestsPolling() {
   if (state.userRequestsGpsTimer) {
     clearInterval(state.userRequestsGpsTimer);
@@ -800,9 +1019,9 @@ function getMyActiveRequest() {
 }
 
 function statusLabelForUser(status) {
-  if (status === "accepted") return "Принято волонтером";
+  if (status === "accepted") return "Принято волонтёром";
   if (status === "closed") return "Завершено";
-  return "В ожидании волонтера";
+  return "В ожидании волонтёра";
 }
 
 function initUserRequestsPage() {
@@ -918,7 +1137,7 @@ function renderUserRequestsActive(active) {
   if (active.status === "accepted") {
     const volProfiles = getVolunteerProfiles();
     const volunteer = active.acceptedByPhone ? volProfiles[active.acceptedByPhone] : null;
-    const contactName = volunteer?.fullName || "Волонтер";
+    const contactName = volunteer?.fullName || "Волонтёр";
     const contactPhone = volunteer?.phone || active.acceptedByPhone || "Телефон не указан";
     const volunteerDistrict = volunteer?.districtArea ? `, ${volunteer.districtArea}` : "";
 
@@ -928,7 +1147,7 @@ function renderUserRequestsActive(active) {
       <div class="request-card">
         <div class="request-meta">
           <div><strong>Статус:</strong> <span>${esc(statusLabelForUser(active.status))}</span></div>
-          <div><strong>Волонтер:</strong> <span>${esc(contactName)} (${esc(contactPhone)})</span></div>
+          <div><strong>Волонтёр:</strong> <span>${esc(contactName)} (${esc(contactPhone)})</span></div>
           <div><strong>Территория:</strong> <span>${esc(volunteer?.city || "—")}${esc(volunteerDistrict)}</span></div>
           <div><strong>Время:</strong> <span>${esc(fmtRelativeMinutes(active.postedAt))}</span></div>
         </div>
@@ -941,7 +1160,7 @@ function renderUserRequestsActive(active) {
         </div>
         ${note}
         <div id="userRequestsActiveHint" class="status status-neutral" style="margin-top:12px;" role="status" aria-live="polite">
-          Маршрут построен на карте, если доступны координаты волонтера.
+          Маршрут построен на карте, если доступны координаты волонтёра.
         </div>
       </div>
     `;
@@ -950,7 +1169,7 @@ function renderUserRequestsActive(active) {
 
   if (active.status === "closed") {
     activeWrap.innerHTML = `
-      <div class="status status-neutral">Ваш запрос завершен.</div>
+      <div class="status status-neutral">Ваш запрос завершён.</div>
     `;
     return;
   }
@@ -966,7 +1185,7 @@ function renderUserRequestsActive(active) {
       </div>
       ${note}
       <div class="status status-neutral" style="margin-top:12px;" role="status" aria-live="polite">
-        Как только волонтер примет запрос, здесь появятся контакты и маршрут.
+        Как только волонтёр примет запрос, здесь появятся контакты и маршрут.
       </div>
     </div>
   `;
@@ -999,7 +1218,7 @@ function renderUserRequestsMap(active) {
       fillOpacity: 0.95,
       weight: 2,
     }).addTo(state.userRequestsMap);
-    state.userRequestsVolunteerMarker.bindPopup("Волонтер");
+    state.userRequestsVolunteerMarker.bindPopup("Волонтёр");
 
     state.userRequestsRouteLine = L.polyline([userCoords, volCoords], {
       color: "var(--yellow-dark)",
@@ -1018,13 +1237,14 @@ function renderUserRequestsMap(active) {
   }
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    VOLUNTEER (local-only)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function syncVolunteerAuthUI() {
   const navVolunteer = document.querySelector(".nav-volunteer-link");
   if (state.volunteer && navVolunteer) navVolunteer.classList.remove("hidden");
   if (!state.volunteer && navVolunteer) navVolunteer.classList.add("hidden");
+  updateNavbarVisibility();
 
   // Volunteer home may show profile hint; keep simple for now
 }
@@ -1064,17 +1284,17 @@ function handleVolunteerSignUp(e) {
   ].filter(Boolean);
 
   if (!fullName || !phone || !city || !districtArea) {
-    showStatus(statusEl, "Р—Р°РїРѕР»РЅРёС‚Рµ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹е поля.", "error");
+    showStatus(statusEl, "Заполните обязательные поля.", "error");
     return;
   }
 
   if (!availWeekdays && !availWeekends && !availAlways) {
-    showStatus(statusEl, "Р’С‹Р±РµСЂРёС‚Рµ, РєРѕРіРґР° РІС‹ СЃРІРѕР±РѕРґРЅС‹.", "error");
+    showStatus(statusEl, "Выберите, когда вы свободны.", "error");
     return;
   }
 
   if (!disabilities.length) {
-    showStatus(statusEl, "РћС‚РјРµС‚СЊС‚Рµ, СЃ РєРµРј РІС‹ РјРѕР¶РµС‚Рµ РїРѕРјРѕРіР°С‚ь.", "error");
+    showStatus(statusEl, "Отметьте, с кем вы можете помогать.", "error");
     return;
   }
 
@@ -1091,7 +1311,7 @@ function handleVolunteerSignUp(e) {
 
   const ok = saveVolunteerProfile(profile);
   if (!ok) {
-    showStatus(statusEl, "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РїСЂРѕС„РёР»СЊ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РµС‰е раз.", "error");
+    showStatus(statusEl, "Не удалось сохранить профиль. Попробуйте еще раз.", "error");
     return;
   }
 
@@ -1099,7 +1319,7 @@ function handleVolunteerSignUp(e) {
   persistVolunteerSession();
   persistVolunteerAvailability("available");
 
-  showStatus(statusEl, "РџСЂРѕС„РёР»СЊ РІРѕР»РѕРЅС‚ёра сохранён.", "success");
+  showStatus(statusEl, "Профиль волонтёра сохранён.", "success");
   setTimeout(() => (location.hash = "#volunteer-home"), 700);
 }
 
@@ -1109,7 +1329,7 @@ function handleVolunteerSignIn(e) {
   const statusEl = document.getElementById("volunteerSigninStatus");
 
   if (!phone) {
-    showStatus(statusEl, "Р’РІРµРґРёС‚Рµ С‚РµР»РµС„он.", "error");
+    showStatus(statusEl, "Введите телефон.", "error");
     return;
   }
 
@@ -1117,7 +1337,7 @@ function handleVolunteerSignIn(e) {
   const profile = profiles[phone];
 
   if (!profile) {
-    showStatus(statusEl, "РџСЂРѕС„РёР»СЊ СЃ С‚Р°РєРёРј С‚РµР»РµС„РѕРЅРѕРј РЅРµ РЅР°Р№РґРµРЅ. Р—Р°СЂРµРіРёСЃС‚СЂРёСЂСѓР№С‚есь.", "error");
+    showStatus(statusEl, "Профиль с таким телефоном не найден. Зарегистрируйтесь.", "error");
     setTimeout(() => (location.hash = "#volunteer-signup"), 600);
     return;
   }
@@ -1126,7 +1346,7 @@ function handleVolunteerSignIn(e) {
   persistVolunteerSession();
   persistVolunteerAvailability(loadVolunteerAvailability());
   syncVolunteerAuthUI();
-  showStatus(statusEl, "Р’С‹ РІРѕС€Р»Рё РєР°Рє РІРѕР»РѕРЅС‚ёр.", "success");
+  showStatus(statusEl, "Вы вошли как волонтёр.", "success");
   setTimeout(() => (location.hash = "#volunteer-home"), 650);
 }
 
@@ -1216,8 +1436,8 @@ function renderVolunteerHome() {
       return `
         <div class="request-card" data-request-id="${esc(r.id)}">
           <div class="request-meta">
-            <div><strong>РќСѓР¶РЅР° РїРѕРјРѕС‰ь:</strong> <span>${esc(helpTypeLabel(r.type))}</span></div>
-            <div><strong>Р Р°СЃСЃС‚ояние:</strong> <span>${esc(distText)}</span></div>
+            <div><strong>Нужна помощь:</strong> <span>${esc(helpTypeLabel(r.type))}</span></div>
+            <div><strong>Расстояние:</strong> <span>${esc(distText)}</span></div>
             <div><strong>Время:</strong> <span>${esc(fmtRelativeMinutes(r.postedAt))}</span></div>
           </div>
           <button type="button"
@@ -1225,7 +1445,7 @@ function renderVolunteerHome() {
             data-volunteer-action="accept"
             data-request-id="${esc(r.id)}"
             ${state.volunteerAvailability === "busy" ? "disabled" : ""}>
-            РџСЂРёРЅСЏС‚ь запрос
+            Принять запрос
           </button>
         </div>
       `;
@@ -1238,12 +1458,12 @@ function renderVolunteerHome() {
 
 function helpTypeLabel(type) {
   const map = {
-    wheelchair: "Рнвалидная коляска",
-    blind: "РЎР»РµРїС‹Рµ / СЃР»Р°Р±РѕРІРёРґСЏС‰ие",
-    elderly: "РџРѕР¶РёР»С‹е",
-    deaf: "Р“Р»СѓС…РёРµ / СЃР»Р°Р±РѕСЃР»С‹С€Р°С‰ие",
+    wheelchair: "Инвалидная коляска",
+    blind: "Слепые / слабовидящие",
+    elderly: "Пожилые",
+    deaf: "Глухие / слабослышащие",
   };
-  return map[type] || "РџРѕРјРѕС‰ь";
+  return map[type] || "Помощь";
 }
 
 function renderVolunteerActiveRequest(active) {
@@ -1251,26 +1471,26 @@ function renderVolunteerActiveRequest(active) {
   if (!wrap) return;
 
   const contact = active?.requester || {};
-  const name = contact.name || "РџРѕР»СЊР·РѕРІР°С‚ель";
-  const phone = contact.phone || "РўРµР»РµС„он не указан";
+  const name = contact.name || "Пользователь";
+  const phone = contact.phone || "Телефон не указан";
 
   const note = active?.note ? `<div style="margin-top:10px;">${esc(active.note)}</div>` : "";
-  const posted = `<div class="status status-neutral" style="margin-top:10px;">Р Р°Р·РјРµС‰ено: ${esc(fmtRelativeMinutes(active.postedAt))}</div>`;
+  const posted = `<div class="status status-neutral" style="margin-top:10px;">Размещено: ${esc(fmtRelativeMinutes(active.postedAt))}</div>`;
 
   wrap.innerHTML = `
     <div class="request-card">
       <div class="request-meta">
         <div><strong>Запрос:</strong> <span>${esc(helpTypeLabel(active.type))}</span></div>
-        <div><strong>РљРѕРЅС‚Р°РєС‚С‹:</strong> <span>${esc(name)} — ${esc(phone)}</span></div>
+        <div><strong>Контакты:</strong> <span>${esc(name)} — ${esc(phone)}</span></div>
       </div>
       ${posted}
       ${note}
       <div style="display:flex; gap:12px; margin-top:14px; flex-wrap:wrap;">
         <button type="button" id="volunteerFinishActiveRequest" class="primary-button" style="flex:1; min-width:220px;">
-          Р—Р°РІРµСЂС€РёС‚СЊ РјР°СЂС€СЂСѓС‚
+          Завершить маршрут
         </button>
         <button type="button" id="volunteerCancelActiveRequest" class="secondary-button" style="flex:1; min-width:220px;">
-          РћС‚РјРµРЅРёС‚СЊ (СЃС‚Р°С‚СЊ РґРѕСЃС‚СѓРїРЅС‹м)
+          Отменить (стать доступным)
         </button>
       </div>
       <div id="volunteerActiveRequestStatus" class="status hidden" style="margin-top:12px;" role="status" aria-live="polite"></div>
@@ -1317,7 +1537,7 @@ function renderVolunteerMarkers(requests) {
       fillOpacity: 0.95,
       weight: 3,
     }).addTo(state.volunteerMap);
-    state.volunteerUserMarker.bindPopup("Р’С‹ (РІРѕР»РѕРЅС‚ёр)");
+    state.volunteerUserMarker.bindPopup("Вы (волонтёр)");
   }
 
   // Request markers
@@ -1331,7 +1551,7 @@ function renderVolunteerMarkers(requests) {
       weight: 2,
     }).addTo(state.volunteerMap);
 
-    marker.bindPopup(`${helpTypeLabel(r.type)}<br>${esc(r.requester?.name || "РџРѕР»СЊР·РѕРІР°С‚ель")}`);
+    marker.bindPopup(`${helpTypeLabel(r.type)}<br>${esc(r.requester?.name || "Пользователь")}`);
     state.volunteerRequestMarkers.push({ id: r.id, marker });
   }
 }
@@ -1355,7 +1575,7 @@ async function refreshVolunteerLocation({ centerMap = false, silent = true } = {
     renderVolunteerHome();
   } catch {
     const statusEl = document.getElementById("volunteerGpsStatus");
-    if (statusEl && !silent) statusEl.textContent = "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚ь GPS.";
+    if (statusEl && !silent) statusEl.textContent = "Не удалось получить GPS.";
   }
 }
 
@@ -1396,7 +1616,7 @@ function acceptVolunteerRequest(requestId) {
   const statusEl = document.getElementById("volunteerActiveRequestStatus");
 
   if (state.volunteerAvailability === "busy") {
-    showStatus(statusEl, "РЎРЅР°С‡Р°Р»Р° Р·Р°РІРµСЂС€РёС‚Рµ С‚РµРєСѓС‰РёР№ РјР°СЂС€СЂСѓС‚.", "error");
+    showStatus(statusEl, "Сначала завершите текущий маршрут.", "error");
     return;
   }
 
@@ -1446,7 +1666,7 @@ function finishVolunteerActiveRequest(requestId, { silent = false, cancel = fals
 
   if (!silent) {
     const statusEl = document.getElementById("volunteerActiveRequestStatus");
-    if (statusEl) showStatus(statusEl, cancel ? "Р’С‹ СЃС‚Р°Р»Рё РґРѕСЃС‚СѓРїРЅС‹." : "РњР°СЂС€СЂСѓС‚ Р·Р°РІРµСЂС€ён.", "success");
+    if (statusEl) showStatus(statusEl, cancel ? "Вы стали доступны." : "Маршрут завершён.", "success");
   }
 
   // Re-render feed without active request
@@ -1495,9 +1715,9 @@ function stopVolunteerPolling() {
   }
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    DOCUMENT VERIFICATION (Gemini via backend)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 const VERIFY_DOCUMENT_PATH = "/api/verify-document";
 
 function deriveVerificationUi(user) {
@@ -1506,24 +1726,24 @@ function deriveVerificationUi(user) {
     const isValid = v.is_valid_document;
     const confidence = Number(v.confidence || 0);
     if (!isValid) {
-      return { statusKey: "not-verified", text: "Не верифицировано", className: "not-verified" };
+      return { statusKey: "not-verified", text: "❌ Не верифицировано", className: "not-verified" };
     }
     if (confidence > 0.7) {
-      return { statusKey: "verified", text: "Верифицирован", className: "verified" };
+      return { statusKey: "verified", text: "✅ Верифицирован", className: "verified" };
     }
     if (confidence >= 0.4 && confidence <= 0.7) {
-      return { statusKey: "under", text: "На проверке", className: "under" };
+      return { statusKey: "under", text: "🟡 На проверке", className: "under" };
     }
-    return { statusKey: "under", text: "На проверке", className: "under" };
+    return { statusKey: "under", text: "🟡 На проверке", className: "under" };
   }
 
   // Legacy/mock fallback
   const legacyStatus = user?.verificationStatus;
-  if (legacyStatus === "verified") return { statusKey: "verified", text: "Верифицирован", className: "verified" };
+  if (legacyStatus === "verified") return { statusKey: "verified", text: "✅ Верифицирован", className: "verified" };
   if (legacyStatus === "under_verification" || legacyStatus === "under") {
-    return { statusKey: "under", text: "На проверке", className: "under" };
+    return { statusKey: "under", text: "🟡 На проверке", className: "under" };
   }
-  return { statusKey: "not-verified", text: "Не верифицировано", className: "not-verified" };
+  return { statusKey: "not-verified", text: "❌ Не верифицировано", className: "not-verified" };
 }
 
 function applyVerificationBadgeToEl(el, user) {
@@ -1545,7 +1765,7 @@ async function verifyUserDisabilityDocument(file) {
   const navBadgeEl = document.getElementById("navVerificationBadge");
 
   // Show loading state immediately
-  const loadingUi = { statusKey: "under", text: "На проверке", className: "under" };
+  const loadingUi = { statusKey: "under", text: "🟡 На проверке", className: "under" };
   if (profileBadgeEl) {
     profileBadgeEl.classList.remove("verified", "under", "not-verified");
     profileBadgeEl.classList.add(loadingUi.className);
@@ -1596,13 +1816,18 @@ async function verifyUserDisabilityDocument(file) {
 
     const ui = deriveVerificationUi(state.user);
     const tone = ui.statusKey === "verified" ? "success" : ui.statusKey === "not-verified" ? "error" : "loading";
+    const payload2 = state.user.documentVerification || {};
+    const docType = payload2.document_type || payload2.documentType || "unknown";
+    const conf = Number(payload2.confidence || state.user.verificationConfidence || 0);
+    const reason = payload2.reason || state.user.verificationReason || "";
+    const confText = `${conf.toFixed(2)}`;
+
+    const msgVerified = `✅ Верифицирован. Тип: ${esc(docType)}. Уверенность: ${esc(confText)}. ${esc(reason)}`;
+    const msgNotVerified = `❌ Не верифицировано. Тип: ${esc(docType)}. Уверенность: ${esc(confText)}. ${esc(reason)}`;
+    const msgUnder = `🟡 На проверке. Тип: ${esc(docType)}. Уверенность: ${esc(confText)}. ${esc(reason)}`;
     showStatus(
       profileStatusEl,
-      ui.statusKey === "verified"
-        ? "Документ верифицирован."
-        : ui.statusKey === "not-verified"
-          ? "Документ не верифицирован."
-          : "Документ отправлен на проверку.",
+      ui.statusKey === "verified" ? msgVerified : ui.statusKey === "not-verified" ? msgNotVerified : msgUnder,
       tone === "loading" ? "neutral" : tone
     );
   } catch (err) {
@@ -1612,7 +1837,10 @@ async function verifyUserDisabilityDocument(file) {
     syncAuthUI();
     hydrateProfile();
 
-    const msg = err instanceof Error ? err.message : "РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё РґРѕРєСѓРјРµРЅС‚а.";
+    let msg = err instanceof Error ? err.message : "Ошибка проверки документа.";
+    if (msg && msg.toLowerCase().includes("failed to fetch")) {
+      msg = `Не удалось связаться с сервером. Проверьте доступность ${BASE_URL}${VERIFY_DOCUMENT_PATH} и CORS.`;
+    }
     const ui = deriveVerificationUi(state.user);
     if (profileBadgeEl) applyVerificationBadgeToEl(profileBadgeEl, state.user);
     if (navBadgeEl) applyVerificationBadgeToEl(navBadgeEl, state.user);
@@ -1620,9 +1848,9 @@ async function verifyUserDisabilityDocument(file) {
   }
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    PROFILE
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function hydrateProfile() {
   if (!state.user) return;
   const u = state.user;
@@ -1631,7 +1859,7 @@ function hydrateProfile() {
   document.getElementById("profilePhone").value = u.phone || "";
   document.getElementById("profileDisability").value = u.disability || "wheelchair";
   document.getElementById("profileEmergencyContact").value = u.emergencyContact || "";
-  document.getElementById("profileDisplayName").textContent = u.name || "РџРѕР»СЊР·РѕРІР°С‚ель";
+  document.getElementById("profileDisplayName").textContent = u.name || "Пользователь";
   document.getElementById("profileDisplayEmail").textContent = u.email || "";
   document.getElementById("profileAvatar").textContent = (u.name || "U").charAt(0).toUpperCase();
 
@@ -1646,17 +1874,18 @@ function handleProfileSave(e) {
   state.user.name = document.getElementById("profileName").value.trim();
   state.user.phone = document.getElementById("profilePhone").value.trim();
   state.user.disability = document.getElementById("profileDisability").value;
+  state.user.disability_type = state.user.disability;
   state.user.emergencyContact = document.getElementById("profileEmergencyContact").value.trim();
 
   persistUser();
   syncAuthUI();
   hydrateProfile();
-  showStatus(document.getElementById("profileStatus"), "РџСЂРѕС„иль сохранён.", "success");
+  showStatus(document.getElementById("profileStatus"), "Профиль сохранён.", "success");
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    SETTINGS
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function saveSetting(key, value) { localStorage.setItem(`inkomek-setting-${key}`, JSON.stringify(value)); }
 
 function loadSettings() {
@@ -1681,9 +1910,9 @@ function loadSetting(key, fallback) {
   catch { return fallback; }
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    LEAFLET MAPS
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function initNavMap() {
   if (state.navMap) { state.navMap.invalidateSize(); return; }
 
@@ -1725,9 +1954,9 @@ function hydrateNavForm() {
   if ($("endLon") && !$("endLon").value) $("endLon").value = String(DEFAULT_DESTINATION[1]);
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    NOMINATIM ADDRESS SEARCH
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function setupAddressSearch(config) {
   const input = document.getElementById(config.inputId);
   const list = document.getElementById(config.suggestionsId);
@@ -1854,16 +2083,666 @@ function biasToKazakhstan(query) {
   return hasCity ? query : `${query}, Almaty, Kazakhstan`;
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
+   AUTONOMOUS NAVIGATION HELPERS
+   ═══════════════════════════════════════ */
+function getStoredUserProfile() {
+  try {
+    return state.user || JSON.parse(localStorage.getItem("inkomek-user") || "null") || JSON.parse(localStorage.getItem("user") || "null");
+  } catch {
+    return state.user || null;
+  }
+}
+
+function getProfileDisabilityType() {
+  const profile = getStoredUserProfile() || {};
+  return profile.disability_type || profile.disability || "";
+}
+
+function mapProfileDisabilityToRouteUserType(disabilityType) {
+  const raw = String(disabilityType || "").trim().toLowerCase();
+  if (raw === "wheelchair") return "wheelchair";
+  if (raw === "blind" || raw === "vision" || raw === "visual") return "blind";
+  if (raw === "elderly") return "elderly";
+  if (raw === "deaf") return "elderly";
+  return null;
+}
+
+function getDisplayDisabilityType(disabilityType) {
+  const raw = String(disabilityType || "").trim().toLowerCase();
+  if (["wheelchair", "blind", "elderly", "deaf"].includes(raw)) return raw;
+  return "";
+}
+
+function getNavLoopIntervalMs(displayType) {
+  return displayType === "blind" ? 3000 : 5000;
+}
+
+function shouldUseVoice(displayType) {
+  return displayType === "wheelchair" || displayType === "elderly" || displayType === "blind";
+}
+
+function shouldUseHaptics(displayType) {
+  return displayType === "deaf" || displayType === "blind";
+}
+
+function speakGuidance(text, { force = false } = {}) {
+  if (!("speechSynthesis" in window) || !text) return;
+  const now = Date.now();
+  if (!force && state.activeNavLastInstruction === text && now - state.activeNavLastSpokenAt < 8000) return;
+
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ru-RU";
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    window.speechSynthesis.speak(utter);
+    state.activeNavLastSpokenAt = now;
+    state.activeNavLastInstruction = text;
+  } catch {
+    // ignore speech synthesis failures
+  }
+}
+
+function radians(v) { return (v * Math.PI) / 180; }
+function degrees(v) { return (v * 180) / Math.PI; }
+function distanceMeters(a, b) { return haversineKm(a, b) * 1000; }
+function normalizeAngle(v) {
+  let out = v;
+  while (out > 180) out -= 360;
+  while (out < -180) out += 360;
+  return out;
+}
+
+function bearingDegrees(a, b) {
+  const [lat1, lon1] = a.map(radians);
+  const [lat2, lon2] = b.map(radians);
+  const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+  return (degrees(Math.atan2(y, x)) + 360) % 360;
+}
+
+function cardinalDirection(bearing) {
+  const dirs = ["север", "северо-восток", "восток", "юго-восток", "юг", "юго-запад", "запад", "северо-запад"];
+  return dirs[Math.round((((bearing % 360) + 360) % 360) / 45) % 8];
+}
+
+function turnDirectionFromDelta(delta) {
+  if (Math.abs(delta) < 25) return "прямо";
+  return delta > 0 ? "направо" : "налево";
+}
+
+function interpolatePoint(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+function distancePointToSegmentMeters(p, a, b) {
+  // local equirectangular approximation is good enough for city routing
+  const latScale = 111320;
+  const lonScale = Math.cos(radians((a[0] + b[0] + p[0]) / 3)) * 111320;
+  const ax = a[1] * lonScale, ay = a[0] * latScale;
+  const bx = b[1] * lonScale, by = b[0] * latScale;
+  const px = p[1] * lonScale, py = p[0] * latScale;
+  const abx = bx - ax, aby = by - ay;
+  const ab2 = abx * abx + aby * aby || 1;
+  let t = ((px - ax) * abx + (py - ay) * aby) / ab2;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + abx * t, qy = ay + aby * t;
+  return Math.hypot(px - qx, py - qy);
+}
+
+function nearestRouteIndex(point, routeCoords) {
+  if (!Array.isArray(routeCoords) || !routeCoords.length) return 0;
+  let bestIdx = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < routeCoords.length; i += 1) {
+    const d = distanceMeters(point, routeCoords[i]);
+    if (d < best) {
+      best = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+function distanceToRouteMeters(point, routeCoords) {
+  if (!Array.isArray(routeCoords) || routeCoords.length < 2) return Number.POSITIVE_INFINITY;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < routeCoords.length - 1; i += 1) {
+    best = Math.min(best, distancePointToSegmentMeters(point, routeCoords[i], routeCoords[i + 1]));
+  }
+  return best;
+}
+
+function sampleRouteEvery(routeCoords, stepMeters = 30) {
+  if (!Array.isArray(routeCoords) || routeCoords.length < 2) return [];
+  const samples = [];
+  let acc = 0;
+  let nextTarget = stepMeters;
+  for (let i = 1; i < routeCoords.length; i += 1) {
+    const prev = routeCoords[i - 1];
+    const curr = routeCoords[i];
+    const seg = distanceMeters(prev, curr);
+    while (acc + seg >= nextTarget) {
+      const t = (nextTarget - acc) / seg;
+      samples.push({ location: interpolatePoint(prev, curr, t), distanceFromStart: nextTarget, number: samples.length + 1, index: i });
+      nextTarget += stepMeters;
+    }
+    acc += seg;
+  }
+  return samples;
+}
+
+function getNearbyRouteWarnings(routeCoords) {
+  const warnings = [];
+  for (const pin of state.reportPins || []) {
+    if (!pin?.location) continue;
+    const routeDistance = distanceToRouteMeters(pin.location, routeCoords);
+    if (routeDistance <= 25) {
+      warnings.push({
+        type: pin.category || "warning",
+        location: pin.location,
+        distanceToRoute: routeDistance,
+      });
+    }
+  }
+  return warnings;
+}
+
+function getTurnWaypoints(routeCoords) {
+  const turns = [];
+  if (!Array.isArray(routeCoords) || routeCoords.length < 3) return turns;
+  for (let i = 1; i < routeCoords.length - 1; i += 1) {
+    const b1 = bearingDegrees(routeCoords[i - 1], routeCoords[i]);
+    const b2 = bearingDegrees(routeCoords[i], routeCoords[i + 1]);
+    const delta = normalizeAngle(b2 - b1);
+    if (Math.abs(delta) >= 28) {
+      turns.push({
+        index: i,
+        location: routeCoords[i],
+        delta,
+        direction: turnDirectionFromDelta(delta),
+        bearing: b2,
+      });
+    }
+  }
+  return turns;
+}
+
+function getRouteBounds(routeCoords) {
+  const lats = routeCoords.map((p) => p[0]);
+  const lons = routeCoords.map((p) => p[1]);
+  return {
+    south: Math.min(...lats) - 0.002,
+    north: Math.max(...lats) + 0.002,
+    west: Math.min(...lons) - 0.002,
+    east: Math.max(...lons) + 0.002,
+  };
+}
+
+async function fetchRouteContextFromOsm(routeCoords) {
+  try {
+    const { south, west, north, east } = getRouteBounds(routeCoords);
+    const query = `[out:json][timeout:15];(node["amenity"="bench"](${south},${west},${north},${east});node["highway"="steps"](${south},${west},${north},${east});way["highway"="steps"](${south},${west},${north},${east}););out center;`;
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: query,
+    });
+    if (!res.ok) return { benches: [], stairs: [] };
+    const payload = await res.json();
+    const benches = [];
+    const stairs = [];
+    for (const el of payload.elements || []) {
+      const point = Number.isFinite(el.lat) && Number.isFinite(el.lon)
+        ? [Number(el.lat), Number(el.lon)]
+        : Number.isFinite(el.center?.lat) && Number.isFinite(el.center?.lon)
+          ? [Number(el.center.lat), Number(el.center.lon)]
+          : null;
+      if (!point) continue;
+      if (distanceToRouteMeters(point, routeCoords) > 35) continue;
+      if (el.tags?.amenity === "bench") benches.push(point);
+      if (el.tags?.highway === "steps") stairs.push(point);
+    }
+    return { benches, stairs };
+  } catch {
+    return { benches: [], stairs: [] };
+  }
+}
+
+function createArrowDivIcon(direction) {
+  const arrow = direction === "направо" ? "→" : direction === "налево" ? "←" : "↑";
+  return L.divIcon({
+    html: `<div style="width:32px;height:32px;border-radius:999px;background:#7e57c2;color:white;display:flex;align-items:center;justify-content:center;font-weight:1000;border:2px solid white;box-shadow:0 10px 24px rgba(126,87,194,0.25)">${arrow}</div>`,
+    className: "",
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
+function createNumberDivIcon(number) {
+  return L.divIcon({
+    html: `<div style="width:32px;height:32px;border-radius:999px;background:#fb8c00;color:white;display:flex;align-items:center;justify-content:center;font-weight:1000;border:2px solid white;box-shadow:0 10px 24px rgba(251,140,0,0.25)">${number}</div>`,
+    className: "",
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
+function clearActiveRouteDecorations() {
+  for (const marker of state.activeNavWaypointMarkers || []) marker.remove?.();
+  for (const marker of state.activeNavAuxMarkers || []) marker.remove?.();
+  for (const marker of state.activeNavArrowMarkers || []) marker.remove?.();
+  state.activeNavWaypointMarkers = [];
+  state.activeNavAuxMarkers = [];
+  state.activeNavArrowMarkers = [];
+}
+
+function renderAdaptiveRouteDecorations(displayType, routeCoords, routeMeta, osmContext) {
+  clearActiveRouteDecorations();
+  const mapInstance = state.navMap;
+  if (!mapInstance) return;
+
+  if (displayType === "blind") {
+    for (const wp of routeMeta.numberedWaypoints || []) {
+      const m = L.marker(wp.location, { icon: createNumberDivIcon(wp.number) }).addTo(mapInstance).bindPopup(`Точка ${wp.number}`);
+      state.activeNavWaypointMarkers.push(m);
+    }
+  }
+
+  if (displayType === "deaf") {
+    for (const turn of routeMeta.turns || []) {
+      const m = L.marker(turn.location, { icon: createArrowDivIcon(turn.direction) }).addTo(mapInstance).bindPopup(`Поворот ${turn.direction}`);
+      state.activeNavArrowMarkers.push(m);
+    }
+  }
+
+  if (displayType === "elderly") {
+    for (const bench of osmContext.benches || []) {
+      const m = L.circleMarker(bench, { radius: 7, color: "#2e7d32", fillColor: "#66bb6a", fillOpacity: 0.95, weight: 2 }).addTo(mapInstance).bindPopup("Точка отдыха / скамейка");
+      state.activeNavAuxMarkers.push(m);
+    }
+    for (const steps of osmContext.stairs || []) {
+      const m = L.circleMarker(steps, { radius: 8, color: "#a84300", fillColor: "#ffb74d", fillOpacity: 0.95, weight: 2 }).addTo(mapInstance).bindPopup("Лестница рядом с маршрутом");
+      state.activeNavAuxMarkers.push(m);
+    }
+  }
+
+  if (displayType === "wheelchair") {
+    for (const warning of routeMeta.warnings || []) {
+      const m = L.circleMarker(warning.location, { radius: 8, color: "#0d47a1", fillColor: "#42a5f5", fillOpacity: 0.98, weight: 2 }).addTo(mapInstance).bindPopup(`Предупреждение: ${warning.type}`);
+      state.activeNavAuxMarkers.push(m);
+    }
+    for (const steps of osmContext.stairs || []) {
+      const m = L.circleMarker(steps, { radius: 8, color: "#8f1414", fillColor: "#ef5350", fillOpacity: 0.98, weight: 2 }).addTo(mapInstance).bindPopup("Перепад / ступени рядом");
+      state.activeNavAuxMarkers.push(m);
+    }
+  }
+}
+
+function setGuidanceUi(instructionText, nextDistanceText, modeText, visualTurnText = "", showVisualTurn = false) {
+  const panel = document.getElementById("navGuidancePanel");
+  const instructionEl = document.getElementById("navInstructionText");
+  const nextEl = document.getElementById("navNextDistanceText");
+  const modeEl = document.getElementById("navAssistModeText");
+  const visualEl = document.getElementById("navVisualTurnCard");
+  if (panel) panel.classList.remove("hidden");
+  if (instructionEl) instructionEl.textContent = instructionText;
+  if (nextEl) nextEl.textContent = nextDistanceText;
+  if (modeEl) modeEl.textContent = modeText;
+  if (visualEl) {
+    visualEl.textContent = visualTurnText;
+    visualEl.classList.toggle("hidden", !showVisualTurn);
+  }
+}
+
+function setDeafVisualInstruction(text) {
+  setGuidanceUi(text, document.getElementById("navNextDistanceText")?.textContent || "До следующей точки: —", "Режим: визуальный + вибро", text, true);
+}
+
+function getModeText(displayType) {
+  if (displayType === "blind") return "Режим: голос + вибро";
+  if (displayType === "deaf") return "Режим: визуальный + вибро";
+  if (displayType === "elderly") return "Режим: голосовой";
+  if (displayType === "wheelchair") return "Режим: голосовой";
+  return "Режим: —";
+}
+
+function loadAutoReportsHistory() {
+  try { return JSON.parse(localStorage.getItem(ACTIVE_NAV_HISTORY_KEY) || "[]"); } catch { return []; }
+}
+
+function persistAutoReportsHistory(list) {
+  localStorage.setItem(ACTIVE_NAV_HISTORY_KEY, JSON.stringify(list));
+}
+
+function addAutoReportToHistory(report) {
+  const list = loadAutoReportsHistory();
+  list.unshift(report);
+  persistAutoReportsHistory(list.slice(0, 100));
+}
+
+async function postNavigateWithFallback(payload) {
+  try {
+    return await fetchJson("/api/navigate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return fetchJson("/navigate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
+async function postGpsCheckWithFallback(payload) {
+  try {
+    return await fetchJson("/api/gps/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return fetchJson("/gps/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
+async function postAlertWithFallback(payload) {
+  try {
+    return await fetchJson("/api/alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return fetchJson("/alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+}
+
+async function refreshActiveNavigationLocation({ centerMap = false } = {}) {
+  const point = await refreshCurrentLocation({ centerMap, silent: true });
+  if (!point) return null;
+  const gpsStatusEl = document.getElementById("gpsStatus");
+  if (gpsStatusEl) {
+    const prefix = state.currentAddress ? `Адрес: ${state.currentAddress}. ` : "";
+    showStatus(gpsStatusEl, `${prefix}Автономная навигация активна.`, "success");
+  }
+  return point;
+}
+
+function renderArrivalState(displayType) {
+  const text = "Вы прибыли";
+  setGuidanceUi(text, "До следующей точки: 0 м", getModeText(displayType), displayType === "deaf" ? "Прибыли" : "", displayType === "deaf");
+  if (shouldUseVoice(displayType)) speakGuidance(text, { force: true });
+  if (shouldUseHaptics(displayType)) vibrate([500, 200, 500, 200, 500]);
+}
+
+function getActiveDangerAhead(currentPoint) {
+  return (state.activeRouteMeta?.warnings || []).find((warning) => distanceMeters(currentPoint, warning.location) <= 30) || null;
+}
+
+function generateGuidanceInstruction(currentPoint) {
+  const routeCoords = state.activeRouteCoords || [];
+  const displayType = state.activeRouteDisplayType;
+  if (!routeCoords.length || !currentPoint) return null;
+
+  const destination = routeCoords[routeCoords.length - 1];
+  const distanceToDestination = distanceMeters(currentPoint, destination);
+  if (distanceToDestination <= 18) {
+    return {
+      text: "Вы прибыли",
+      arrived: true,
+      nextDistanceText: "До следующей точки: 0 м",
+      visualTurnText: "Прибыли",
+      dangerAhead: false,
+    };
+  }
+
+  const nearestIdx = nearestRouteIndex(currentPoint, routeCoords);
+  state.activeNavProgressIndex = Math.max(state.activeNavProgressIndex || 0, nearestIdx);
+  const routeDistance = distanceToRouteMeters(currentPoint, routeCoords);
+  const offRouteThreshold = displayType === "blind" ? 18 : displayType === "wheelchair" ? 22 : 28;
+  const isOffRoute = routeDistance > offRouteThreshold;
+  if (isOffRoute) {
+    return {
+      text: "Вы отклонились от маршрута",
+      offRoute: true,
+      nextDistanceText: `Отклонение: ${Math.round(routeDistance)} м`,
+      visualTurnText: "Отклонение от маршрута",
+      dangerAhead: false,
+    };
+  }
+
+  const turns = state.activeRouteMeta.turns || [];
+  const nextTurn = turns.find((t) => t.index > state.activeNavProgressIndex);
+  const distanceToTurn = nextTurn ? distanceMeters(currentPoint, nextTurn.location) : distanceToDestination;
+  const nextSegmentTarget = nextTurn?.location || destination;
+  const bearing = bearingDegrees(currentPoint, nextSegmentTarget);
+  const directionText = nextTurn?.direction || "прямо";
+  const dangerAhead = !!getActiveDangerAhead(currentPoint);
+
+  if (displayType === "wheelchair") {
+    const warning = (state.activeRouteMeta.warnings || []).find((w) => distanceMeters(currentPoint, w.location) <= 45);
+    const extra = warning ? ` Впереди предупреждение: ${warning.type}, проверьте покрытие и возможный уклон.` : "";
+    const text = nextTurn && distanceToTurn <= 55
+      ? `Через ${Math.max(5, Math.round(distanceToTurn))} метров поверните ${directionText}.${extra}`
+      : `Двигайтесь прямо ${Math.max(5, Math.round(distanceToTurn))} метров.${extra}`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+  }
+
+  if (displayType === "elderly") {
+    const benchesAhead = (state.activeRouteMeta.benches || []).find((p) => distanceMeters(currentPoint, p) <= 80);
+    const minutes = Math.max(1, Math.round(distanceToTurn / 60));
+    const benchText = benchesAhead ? ` До скамейки около ${Math.round(distanceMeters(currentPoint, benchesAhead))} м.` : "";
+    const text = nextTurn && distanceToTurn <= 55
+      ? `Через ${Math.round(distanceToTurn)} метров поверните ${directionText}. Время до точки: ${minutes} мин.${benchText}`
+      : `Идите ещё ${Math.round(distanceToTurn)} метров. Время до точки: ${minutes} мин.${benchText}`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+  }
+
+  if (displayType === "blind") {
+    const steps = Math.max(5, Math.round(distanceToTurn / 0.75));
+    const cardinal = cardinalDirection(bearing);
+    const text = nextTurn && distanceToTurn <= 45
+      ? `Через ${Math.round(distanceToTurn)} метров поверните ${directionText}, ориентир на ${cardinal}. Это около ${steps} шагов.`
+      : `Идите на ${cardinal}, около ${steps} шагов до следующей точки.`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+  }
+
+  if (displayType === "deaf") {
+    const text = nextTurn && distanceToTurn <= 55
+      ? `Через ${Math.round(distanceToTurn)} м: ${directionText}`
+      : `Прямо ${Math.round(distanceToTurn)} м`;
+    return { text, nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: text, dangerAhead };
+  }
+
+  return { text: "Следуйте по маршруту", nextDistanceText: `До следующей точки: ${Math.round(distanceToTurn)} м`, visualTurnText: "", dangerAhead };
+}
+
+function applyHapticGuidance(instruction) {
+  const displayType = state.activeRouteDisplayType;
+  if (!shouldUseHaptics(displayType) || !instruction) return;
+  if (instruction.arrived) { vibrate([500, 200, 500, 200, 500]); return; }
+  if (instruction.offRoute) { vibrate([1000]); return; }
+  if (instruction.dangerAhead) { vibrate([200, 100, 200, 100, 200, 100, 200]); return; }
+  const lower = String(instruction.text || "").toLowerCase();
+  if (lower.includes("направо")) { vibrate([100, 50, 100, 50, 100]); return; }
+  if (lower.includes("налево")) { vibrate([300, 50, 300]); return; }
+  const now = Date.now();
+  if (!state.activeNavLastStraightPulseAt || now - state.activeNavLastStraightPulseAt >= 10000) {
+    vibrate([200]);
+    state.activeNavLastStraightPulseAt = now;
+  }
+}
+
+function runGuidanceCycle() {
+  if (!state.activeNavRunning || !state.currentLocation) return;
+  const displayType = state.activeRouteDisplayType;
+  const instruction = generateGuidanceInstruction(state.currentLocation);
+  if (!instruction) return;
+
+  if (instruction.arrived) {
+    renderArrivalState(displayType);
+    stopActiveNavigationSession({ keepRoute: true });
+    return;
+  }
+
+  setGuidanceUi(instruction.text, instruction.nextDistanceText, getModeText(displayType), instruction.visualTurnText, displayType === "deaf");
+  if (displayType === "deaf") setDeafVisualInstruction(instruction.visualTurnText || instruction.text);
+  if (shouldUseVoice(displayType)) speakGuidance(instruction.text);
+  if (shouldUseHaptics(displayType)) applyHapticGuidance(instruction);
+}
+
+async function triggerAutoAnomalyReport(response) {
+  const displayType = state.activeRouteDisplayType || getDisplayDisabilityType(getProfileDisabilityType());
+  const disabilityType = getProfileDisabilityType();
+  const location = state.currentLocation || response?.location || DEFAULT_CENTER;
+  vibrate([500, 200, 500]);
+  if (displayType !== "deaf" && displayType !== "blind") {
+    speakGuidance("Обнаружена проблема, отправляю запрос помощи", { force: true });
+  }
+
+  try {
+    await postAlertWithFallback({
+      user_id: LOCAL_USER_ID,
+      location,
+      type: "auto_anomaly",
+      disability_type: disabilityType,
+    });
+  } catch {
+    // Keep local flow even if alert backend is unavailable.
+  }
+
+  addProblemPin({
+    location,
+    category: "auto_anomaly",
+    confidence: 1,
+    notes: `Авто-репорт ИИ: ${response?.anomaly_type || "anomaly"}`,
+  });
+
+  const banner = document.getElementById("anomalyBanner");
+  const bannerText = document.getElementById("anomalyBannerText");
+  if (bannerText) bannerText.textContent = "ИИ отправил запрос помощи";
+  banner?.classList.remove("hidden");
+
+  addAutoReportToHistory({
+    createdAt: Date.now(),
+    location,
+    anomaly_type: response?.anomaly_type || "unknown",
+    disability_type: disabilityType,
+    type: "auto_anomaly",
+  });
+}
+
+async function runActiveAnomalyCheckCycle() {
+  if (!state.activeNavRunning || state.gpsPoints.length < 6) return;
+  try {
+    const response = await postGpsCheckWithFallback({
+      user_id: LOCAL_USER_ID,
+      points: state.gpsPoints.slice(-6),
+    });
+    state.activeNavLastAnomalyResponse = response;
+    const now = Date.now();
+    if (response.is_anomaly) {
+      if (!state.activeNavAnomalySince) {
+        state.activeNavAnomalySince = now;
+        return;
+      }
+      if (now - state.activeNavAnomalySince >= 15000) {
+        await triggerAutoAnomalyReport(response);
+        state.activeNavAnomalySince = now + 30000;
+      }
+    } else {
+      state.activeNavAnomalySince = null;
+      document.getElementById("anomalyBanner")?.classList.add("hidden");
+    }
+  } catch {
+    // Non-fatal during active navigation
+  }
+}
+
+function stopActiveNavigationSession({ keepRoute = false } = {}) {
+  if (state.activeNavLocationTimer) { clearInterval(state.activeNavLocationTimer); state.activeNavLocationTimer = null; }
+  if (state.activeNavGuidanceTimer) { clearInterval(state.activeNavGuidanceTimer); state.activeNavGuidanceTimer = null; }
+  if (state.activeNavAnomalyTimer) { clearInterval(state.activeNavAnomalyTimer); state.activeNavAnomalyTimer = null; }
+  state.activeNavRunning = false;
+  state.activeNavLastInstruction = "";
+  state.activeNavLastSpokenAt = 0;
+  state.activeNavProgressIndex = 0;
+  state.activeNavOffRouteSince = null;
+  state.activeNavAnomalySince = null;
+  if ("speechSynthesis" in window) {
+    try { window.speechSynthesis.cancel(); } catch {}
+  }
+  document.getElementById("anomalyBanner")?.classList.add("hidden");
+  if (!keepRoute) {
+    const panel = document.getElementById("navGuidancePanel");
+    panel?.classList.add("hidden");
+    clearActiveRouteDecorations();
+  }
+}
+
+async function startActiveNavigationSession(routeCoords, { displayType, destinationAddress = "" } = {}) {
+  stopActiveNavigationSession({ keepRoute: true });
+  state.activeNavRunning = true;
+  state.activeRouteCoords = routeCoords;
+  state.activeRouteDisplayType = displayType;
+  state.activeRouteDestination = destinationAddress || "";
+  state.activeRouteMeta = {
+    turns: getTurnWaypoints(routeCoords),
+    warnings: getNearbyRouteWarnings(routeCoords),
+    numberedWaypoints: displayType === "blind" ? sampleRouteEvery(routeCoords, 30) : [],
+    benches: [],
+    stairs: [],
+  };
+
+  const osmContext = await fetchRouteContextFromOsm(routeCoords);
+  state.activeRouteMeta.benches = osmContext.benches;
+  state.activeRouteMeta.stairs = osmContext.stairs;
+  renderAdaptiveRouteDecorations(displayType, routeCoords, state.activeRouteMeta, osmContext);
+
+  const intervalMs = getNavLoopIntervalMs(displayType);
+  await refreshActiveNavigationLocation({ centerMap: false });
+  runGuidanceCycle();
+  runActiveAnomalyCheckCycle();
+  state.activeNavLocationTimer = window.setInterval(() => {
+    refreshActiveNavigationLocation({ centerMap: false });
+  }, intervalMs);
+  state.activeNavGuidanceTimer = window.setInterval(runGuidanceCycle, intervalMs);
+  state.activeNavAnomalyTimer = window.setInterval(runActiveAnomalyCheckCycle, 10000);
+}
+
+/* ═══════════════════════════════════════
    NAVIGATION (POST /navigate)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 async function handleNavigateSubmit(e) {
   e.preventDefault();
   const $ = (id) => document.getElementById(id);
-
-  const userType = $("userType").value;
   const statusEl = $("navigationStatus");
   const btn = $("navigateButton");
+  const profileDisability = getProfileDisabilityType();
+  const routeUserType = mapProfileDisabilityToRouteUserType(profileDisability);
+  const displayType = getDisplayDisabilityType(profileDisability);
+
+  if (!routeUserType || !displayType) {
+    showStatus(statusEl, "Сначала заполните тип инвалидности в профиле перед построением маршрута.", "error");
+    location.hash = "#profile";
+    return;
+  }
+
+  if ($("userType")) $("userType").value = routeUserType;
 
   let start = [Number($("startLat").value), Number($("startLon").value)];
   let end = [Number($("endLat").value), Number($("endLon").value)];
@@ -1896,21 +2775,26 @@ async function handleNavigateSubmit(e) {
     return;
   }
 
-  localStorage.setItem("inkomek-user-type", userType);
+  localStorage.setItem("inkomek-user-type", routeUserType);
   setLoading(btn, true, "Загрузка...");
   showStatus(statusEl, "Запрашиваем доступный маршрут...", "loading");
 
   try {
-    const response = await fetchJson("/navigate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_type: userType, start_coords: start, end_coords: end }),
+    const response = await postNavigateWithFallback({
+      user_type: routeUserType,
+      start_coords: start,
+      end_coords: end,
     });
 
-    drawRoute(response.route_coords || []);
+    await drawRoute(response.route_coords || [], { displayType });
     renderRouteSummary(response.summary || null);
-    showStatus(statusEl, "Маршрут построен.", "success");
+    await startActiveNavigationSession(response.route_coords || [], {
+      displayType,
+      destinationAddress: $("endAddress")?.value.trim() || "",
+    });
+    showStatus(statusEl, "Маршрут построен. Автономное сопровождение активно.", "success");
   } catch (error) {
+    stopActiveNavigationSession();
     clearRoute();
     renderRouteSummary(null);
     showStatus(statusEl, extractError(error, "Не удалось построить маршрут."), "error");
@@ -1919,13 +2803,18 @@ async function handleNavigateSubmit(e) {
   }
 }
 
-function drawRoute(routeCoords) {
+async function drawRoute(routeCoords, { displayType } = {}) {
   clearRoute();
   const mapInstance = state.navMap;
   if (!mapInstance || !Array.isArray(routeCoords) || routeCoords.length === 0) return;
 
   const latLngs = routeCoords.map((p) => [Number(p[0]), Number(p[1])]);
-  state.routeLine = L.polyline(latLngs, { color: "#216e39", weight: 6, opacity: 0.9 }).addTo(mapInstance);
+  let lineStyle = { color: "#216e39", weight: 6, opacity: 0.9 };
+  if (displayType === "wheelchair") lineStyle = { color: "#1565c0", weight: 8, opacity: 0.95 };
+  if (displayType === "blind") lineStyle = { color: "#fb8c00", weight: 7, opacity: 0.95, dashArray: "10 6" };
+  if (displayType === "elderly") lineStyle = { color: "#2e7d32", weight: 7, opacity: 0.95 };
+  if (displayType === "deaf") lineStyle = { color: "#7e57c2", weight: 7, opacity: 0.95 };
+  state.routeLine = L.polyline(latLngs, lineStyle).addTo(mapInstance);
   state.routeMarkers.push(
     L.marker(latLngs[0]).addTo(mapInstance).bindPopup("Старт"),
     L.marker(latLngs[latLngs.length - 1]).addTo(mapInstance).bindPopup("Финиш"),
@@ -1939,6 +2828,11 @@ function clearRoute() {
   state.routeLine = null;
   for (const m of state.routeMarkers) { if (mapInstance) mapInstance.removeLayer(m); }
   state.routeMarkers = [];
+  clearActiveRouteDecorations();
+  state.activeRouteCoords = [];
+  state.activeRouteMeta = {};
+  state.activeRouteUserType = null;
+  state.activeRouteDisplayType = null;
 }
 
 function renderRouteSummary(summary) {
@@ -1950,44 +2844,41 @@ function renderRouteSummary(summary) {
     <div><strong>Расстояние</strong> ${Number(summary.total_length_m || 0).toFixed(1)} м</div>
     <div><strong>Стоимость доступности</strong> ${Number(summary.total_accessibility_cost || 0).toFixed(1)}</div>
     <div><strong>Узлов</strong> ${summary.node_count ?? "-"}</div>
-    <div><strong>Ребер</strong> ${summary.edge_count ?? "-"}</div>
+    <div><strong>Рёбер</strong> ${summary.edge_count ?? "-"}</div>
   </div>`;
-  el.classList.remove("hidden");
+  // Keep summary available, but active guidance UI is primary during navigation.
+  el.classList.add("hidden");
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    REPORT (POST /classify)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 async function handleReportSubmit(e) {
   e.preventDefault();
   const file = document.getElementById("reportImage").files?.[0];
   const statusEl = document.getElementById("reportStatus");
   const btn = document.getElementById("reportButton");
 
-  if (!file) { showStatus(statusEl, "РЎРЅР°С‡Р°Р»Р° РІС‹Р±РµСЂРёС‚Рµ С„РѕС‚о.", "error"); return; }
+  if (!file) { showStatus(statusEl, "Сначала выберите фото.", "error"); return; }
 
   setLoading(btn, true, "Анализ...");
-  showStatus(statusEl, "Р—Р°РіСЂСѓР·РєР° Рё РєР»Р°СЃСЃРёС„РёРєР°С†ия...", "loading");
+  showStatus(statusEl, "Загрузка и классификация...", "loading");
 
   try {
-  const formData = new FormData();
-  formData.append("image", file);
-  if (isValidCoords(location)) {
-    formData.append("lat", String(location[0]));
-    formData.append("lng", String(location[1]));
-  }
+    const formData = new FormData();
+    formData.append("image", file);
 
     const response = await fetchJson("/classify", { method: "POST", body: formData });
     const location = state.currentLocation || DEFAULT_CENTER;
 
     addProblemPin({ location, category: response.category || "unknown", confidence: Number(response.confidence || 0), notes: document.getElementById("reportNotes").value.trim() });
     renderReportResult(response);
-    showStatus(statusEl, "РџСЂРѕР±Р»РµРјР° РєР»Р°СЃСЃРёС„РёС†РёСЂРѕРІР°РЅР° Рё РѕС‚РјРµС‡РµРЅР° РЅР° РєР°СЂС‚е.", "success");
+    showStatus(statusEl, "Проблема классифицирована и отмечена на карте.", "success");
   } catch (error) {
     document.getElementById("reportResult")?.classList.add("hidden");
-    showStatus(statusEl, extractError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ РєР»Р°СЃСЃРёС„РёС†РёСЂРѕРІР°С‚ь."), "error");
+    showStatus(statusEl, extractError(error, "Не удалось классифицировать."), "error");
   } finally {
-    setLoading(btn, false, "РљР»Р°СЃСЃРёС„РёС†РёСЂРѕРІР°С‚ь");
+    setLoading(btn, false, "Классифицировать");
   }
 }
 
@@ -1995,16 +2886,16 @@ function renderReportResult(response) {
   const el = document.getElementById("reportResult");
   if (!el) return;
   el.innerHTML = `<div class="metric-list">
-    <div><strong>РљР°С‚егория</strong> ${esc(response.category || "unknown")}</div>
-    <div><strong>РЈРІРµСЂРµРЅРЅРѕСЃС‚ь</strong> ${fmtConf(response.confidence)}</div>
+    <div><strong>Категория</strong> ${esc(response.category || "unknown")}</div>
+    <div><strong>Уверенность</strong> ${fmtConf(response.confidence)}</div>
     <div><strong>Описание</strong> ${esc(response.description || "—")}</div>
   </div>`;
   el.classList.remove("hidden");
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    SOS (POST /alert)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 async function handleSosPress() {
   vibrate([500, 200, 500, 200, 500]);
   const btn = document.getElementById("sosButton");
@@ -2031,9 +2922,9 @@ async function handleSosPress() {
   }
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    GPS + ANOMALY (POST /gps/check)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 async function refreshCurrentLocation({ centerMap = false, silent = false } = {}) {
   if (!("geolocation" in navigator)) {
     if (!silent) showStatus(document.getElementById("gpsStatus"), "Геолокация не поддерживается.", "error");
@@ -2084,6 +2975,7 @@ function stopGpsPolling() {
 }
 
 async function runGpsCheckCycle() {
+  if (state.activeNavRunning) return;
   const point = await refreshCurrentLocation({ centerMap: false, silent: true });
   if (!point) return;
 
@@ -2119,11 +3011,11 @@ async function runGpsCheckCycle() {
   }
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    MAP MARKERS & PINS
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function updateUserMarkers(point, address = "") {
-  const popupText = address || "Р’Р°С€Рµ РјРµСЃС‚оположение";
+  const popupText = address || "Ваше местоположение";
 
   if (state.navMap) {
     if (state.navUserMarker) {
@@ -2151,8 +3043,8 @@ function updateUserMarkers(point, address = "") {
 function updateReportIssuePreview(point, address = "") {
   if (!state.reportMap) return;
   const popupText = address
-    ? `РџСЂРѕР±Р»РµРјР° Р±СѓРґРµС‚ РѕС‚РјРµС‡ена здесь: ${address}`
-    : "РџСЂРѕР±Р»РµРјР° Р±СѓРґРµС‚ РѕС‚РјРµС‡ена здесь";
+    ? `Проблема будет отмечена здесь: ${address}`
+    : "Проблема будет отмечена здесь";
 
   if (state.reportIssueMarker) {
     state.reportIssueMarker.setLatLng(point);
@@ -2188,14 +3080,14 @@ function renderReportPins(mapInstance) {
   for (const pin of state.reportPins) {
     const m = L.circleMarker(pin.location, {
       radius: 9, color: "#8f1414", fillColor: "#b71c1c", fillOpacity: 0.9, weight: 2,
-    }).addTo(mapInstance).bindPopup(`<strong>${esc(pin.category)}</strong><br>РЈРІРµСЂРµРЅРЅРѕСЃС‚ь: ${fmtConf(pin.confidence)}${pin.notes ? `<br>${esc(pin.notes)}` : ""}`);
+    }).addTo(mapInstance).bindPopup(`<strong>${esc(pin.category)}</strong><br>Уверенность: ${fmtConf(pin.confidence)}${pin.notes ? `<br>${esc(pin.notes)}` : ""}`);
     state.reportMarkers.push(m);
   }
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    BUSINESSES (local-only) on nav map
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 function getCurrentNavUserType() {
   const el = document.getElementById("userType");
   if (el && el.value) return el.value;
@@ -2225,20 +3117,31 @@ function clearBusinessMarkers() {
   state.businessMarkers = [];
 }
 
-function createBusinessStarIcon() {
-  const svg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="#F5A800" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-  </svg>`;
-  const html = `<div style="width:30px;height:30px;border-radius:999px;background:#3B1F0A;border:3px solid #F5A800;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 22px rgba(0,0,0,0.18);">
-    ${svg}
-  </div>`;
+function createBusinessMarkerIcon(business) {
+  const tier = business?.subscriptionTier || "starter";
+  const size = tier === "premium" ? 44 : tier === "pro" ? 38 : 32;
+  const border = tier === "premium" ? "#fff3bf" : "#F5A800";
+  const bg = tier === "premium" ? "#7c4a03" : "#F5A800";
+  const color = tier === "starter" ? "#3B1F0A" : "#fff";
+  const badge = tier === "premium"
+    ? `<span style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:999px;background:#fff7cf;border:2px solid #D48A00;display:flex;align-items:center;justify-content:center;font-size:12px;">★</span>`
+    : tier === "pro"
+      ? `<span style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:999px;background:#edf8f0;border:2px solid #216e39;display:flex;align-items:center;justify-content:center;font-size:12px;color:#216e39;">✓</span>`
+      : "";
+  const shadow = tier === "premium" ? "0 14px 34px rgba(245,168,0,0.38)" : "0 10px 22px rgba(0,0,0,0.18)";
+  const html = `
+    <div style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${bg};border:3px solid ${border};display:flex;align-items:center;justify-content:center;box-shadow:${shadow};font-size:${tier === "starter" ? 18 : 17}px;color:${color};font-weight:1000;">
+      ${tier === "starter" ? "🏢" : tier === "premium" ? "🏢" : "🏢"}
+      ${badge}
+    </div>
+  `;
 
   return L.divIcon({
     html,
     className: "",
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -12],
+    iconSize: [size, size],
+    iconAnchor: [Math.round(size / 2), Math.round(size / 2)],
+    popupAnchor: [0, -14],
   });
 }
 
@@ -2248,14 +3151,16 @@ function renderBusinessPins(mapInstance) {
 
   clearBusinessMarkers();
 
-  const list = loadBusinesses();
-  const icon = createBusinessStarIcon();
+  const list = loadBusinesses().sort((a, b) => {
+    const rank = { premium: 0, pro: 1, starter: 2 };
+    return (rank[a.subscriptionTier] ?? 9) - (rank[b.subscriptionTier] ?? 9);
+  });
 
   for (const b of list) {
     if (!b?.location || !isValidCoords(b.location)) continue;
     if (!businessMatchesOvzFilter(b)) continue;
 
-    const marker = L.marker(b.location, { icon }).addTo(mapInstance);
+    const marker = L.marker(b.location, { icon: createBusinessMarkerIcon(b) }).addTo(mapInstance);
     marker.on("click", () => openBusinessCard(b.id));
     state.businessMarkers.push({ id: b.id, marker });
   }
@@ -2266,6 +3171,8 @@ function incrementBusinessViews(businessId) {
   const idx = list.findIndex((b) => b.id === businessId);
   if (idx < 0) return 0;
   list[idx].views = Number(list[idx].views || 0) + 1;
+  list[idx].analytics = list[idx].analytics || buildBusinessAnalytics(list[idx].id);
+  list[idx].analytics.clicks = Number(list[idx].analytics.clicks || 0) + 1;
   persistBusinesses(list);
   return list[idx].views;
 }
@@ -2286,12 +3193,34 @@ function prefillNavigateForBusiness(business) {
     if (document.getElementById("startAddress")) document.getElementById("startAddress").value = state.currentAddress || "";
     startLat.value = String(state.currentLocation[0]);
     startLon.value = String(state.currentLocation[1]);
-    if (statusEl) showStatus(statusEl, "РЎС‚Р°СЂС‚ Рё С„РёРЅРёС€ Р·Р°РїРѕР»РЅРµРЅС‹ РґР»СЏ РјР°СЂС€СЂСѓС‚а.", "success");
+    if (statusEl) showStatus(statusEl, "Старт и финиш заполнены для маршрута.", "success");
+  }
+
+  const list = loadBusinesses();
+  const idx = list.findIndex((item) => item.id === business.id);
+  if (idx >= 0) {
+    list[idx].analytics = list[idx].analytics || buildBusinessAnalytics(list[idx].id);
+    list[idx].analytics.routeRequests = Number(list[idx].analytics.routeRequests || 0) + 1;
+    persistBusinesses(list);
   }
 
   location.hash = "#navigate";
   // Hide card after navigation action
   hideBusinessCard();
+}
+
+function prefillNavigateToInkomek() {
+  const endAddress = document.getElementById("endAddress");
+  const endLat = document.getElementById("endLat");
+  const endLon = document.getElementById("endLon");
+  const statusEl = document.getElementById("navigationStatus");
+
+  if (endAddress) endAddress.value = "InKomek, Алматы";
+  if (endLat) endLat.value = String(DEFAULT_DESTINATION[0]);
+  if (endLon) endLon.value = String(DEFAULT_DESTINATION[1]);
+
+  if (statusEl) showStatus(statusEl, "Адрес InKomek подставлен. Постройте маршрут.", "success");
+  location.hash = "#navigate";
 }
 
 function hideBusinessCard() {
@@ -2315,8 +3244,16 @@ function openBusinessCard(businessId) {
   if (!panel) return;
 
   const tags = (biz.disabilities || []).map((t) => businessTagsLabel(t)).join(", ");
-  const website = biz.website ? `<a href="${esc(biz.website)}" target="_blank" rel="noopener" class="primary-link">РЎР°Р№С‚</a>` : "";
-  const photo = biz.photoDataUrl ? `<img src="${biz.photoDataUrl}" alt="Р¤РѕС‚о бизнеса" style="width:120px;height:90px;object-fit:cover;border-radius:14px;border:2px solid rgba(59,31,10,0.08); margin-bottom:10px;">` : "";
+  const website = biz.website ? `<a href="${esc(biz.website)}" target="_blank" rel="noopener" class="primary-link">Сайт</a>` : "";
+  const photo = biz.photos?.[0] ? `<img src="${biz.photos[0]}" alt="Фото бизнеса" style="width:120px;height:90px;object-fit:cover;border-radius:14px;border:2px solid rgba(59,31,10,0.08); margin-bottom:10px;">` : "";
+  const verification = getBusinessVerificationUi(biz);
+  const tier = getBusinessTierMeta(biz.subscriptionTier);
+  const routeButton = biz.subscriptionTier === "starter"
+    ? ""
+    : `<button type="button" class="primary-button" data-build-route-business="${esc(biz.id)}" style="flex:1; min-width:220px;">Построить маршрут</button>`;
+  const accessibilityBadge = biz.subscriptionTier === "pro" || biz.subscriptionTier === "premium"
+    ? `<span class="verification-badge verified">✅ Accessibility Badge</span>`
+    : "";
 
   panel.innerHTML = `
     <div class="business-card">
@@ -2325,11 +3262,16 @@ function openBusinessCard(businessId) {
           ${photo}
           <div style="display:flex; gap:10px; align-items:center;">
             <span style="width:34px;height:34px;border-radius:999px;background:#3B1F0A;border:3px solid #F5A800;display:inline-flex;align-items:center;justify-content:center;">
-              <span style="color:#F5A800; font-size:16px; line-height:1;">в…</span>
+              <span style="color:#F5A800; font-size:16px; line-height:1;">★</span>
             </span>
             <div>
               <div style="font-weight:1000; font-size:1.1rem;">${esc(biz.name)}</div>
               <div style="font-weight:800; color: var(--brown-soft);">${esc(categoryLabel(biz.category))}</div>
+              <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+                <span class="business-tier-pill ${esc(biz.subscriptionTier)}">${esc(tier.label)}</span>
+                <span class="verification-badge ${esc(verification.className)}">${esc(verification.text)}</span>
+                ${accessibilityBadge}
+              </div>
             </div>
           </div>
           <div style="margin-top:10px; font-weight:800;">Описание</div>
@@ -2338,25 +3280,26 @@ function openBusinessCard(businessId) {
       </div>
 
       <div style="margin-top:14px;">
-        <div style="font-weight:900;">РљРѕРЅС‚Р°РєС‚С‹</div>
+        <div style="font-weight:900;">Контакты</div>
         <div style="margin-top:6px; display:grid; gap:6px;">
-          <div><strong>РўРµР»РµС„он:</strong> ${esc(biz.phone || "")}</div>
+          <div><strong>Телефон:</strong> ${esc(biz.phone || "")}</div>
+          <div><strong>Email:</strong> ${esc(biz.email || "")}</div>
           <div>${website || ""}</div>
           <div><strong>Адрес:</strong> ${esc(biz.addressText || "")}</div>
         </div>
       </div>
 
       <div style="margin-top:14px;">
-        <div style="font-weight:900;">Р”Р»СЏ РєРѕРіРѕ РїРѕРґС…РѕРґРёС‚</div>
+        <div style="font-weight:900;">Для кого подходит</div>
         <div style="margin-top:6px;">${esc(tags)}</div>
       </div>
 
       <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap;">
-        <button type="button" class="primary-button" data-build-route-business="${esc(biz.id)}" style="flex:1; min-width:220px;">РџРѕСЃС‚СЂРѕРёС‚СЊ РјР°СЂС€СЂСѓС‚</button>
-        <button type="button" class="secondary-button" data-close-business-card="1" style="min-width:160px;">Р—Р°РєСЂС‹С‚ь</button>
+        ${routeButton}
+        <button type="button" class="secondary-button" data-close-business-card="1" style="min-width:160px;">Закрыть</button>
       </div>
 
-      <div class="status status-neutral" style="margin-top:12px;">РџСЂРѕСЃРјРѕС‚СЂС‹: ${Number(biz.views || 0)}</div>
+      <div class="status status-neutral" style="margin-top:12px;">Просмотры: ${Number(biz.views || 0)} · Тариф: ${esc(tier.label)}</div>
     </div>
   `;
 
@@ -2372,19 +3315,78 @@ function openBusinessCard(businessId) {
 
   // Attach a bit more accessible info
   const routeBtn = panel.querySelector("[data-build-route-business]");
-  if (routeBtn) routeBtn.setAttribute("aria-label", "РџРѕСЃС‚СЂРѕРёС‚СЊ РјР°СЂС€СЂСѓС‚ до адреса бизнеса");
+  if (routeBtn) routeBtn.setAttribute("aria-label", "Построить маршрут до адреса бизнеса");
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    BUSINESS PAGES (local-only)
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
+function readSelectedBusinessTier() {
+  const selected = document.querySelector('input[name="businessTier"]:checked');
+  return selected?.value || getSelectedBusinessPlan();
+}
+
+function syncBusinessTierSelectionUi() {
+  const selectedTier = setSelectedBusinessPlan(readSelectedBusinessTier());
+  const meta = getBusinessTierMeta(selectedTier);
+  state.businessRegisterPhotos = state.businessRegisterPhotos.slice(0, meta.photoLimit);
+  const hintEl = document.getElementById("businessPhotoLimitHint");
+  const nameEl = document.getElementById("businessTierSummaryName");
+  const textEl = document.getElementById("businessTierSummaryText");
+  if (hintEl) hintEl.textContent = `Текущий тариф: ${meta.label}. Можно добавить до ${meta.photoLimit} ${meta.photoLimit === 1 ? "фото" : "фото"}.`;
+  if (nameEl) nameEl.textContent = `${meta.label} · ${meta.price}`;
+  if (textEl) textEl.textContent = meta.description;
+  renderBusinessRegisterPhotoPreview();
+}
+
+async function filesToDataUrls(fileList, maxCount) {
+  const files = Array.from(fileList || []).slice(0, maxCount);
+  const results = [];
+  for (const file of files) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(new Error("file read error"));
+      fr.readAsDataURL(file);
+    });
+    if (typeof dataUrl === "string" && dataUrl) results.push(dataUrl);
+  }
+  return results;
+}
+
+function renderBusinessRegisterPhotoPreview() {
+  const listEl = document.getElementById("businessPhotoPreviewList");
+  const nameEl = document.getElementById("businessPhotoName");
+  if (nameEl) nameEl.textContent = state.businessRegisterPhotos.length ? `Выбрано фото: ${state.businessRegisterPhotos.length}` : "";
+  if (!listEl) return;
+  listEl.innerHTML = state.businessRegisterPhotos
+    .map((src, idx) => `
+      <div class="business-photo-item">
+        <img src="${esc(src)}" alt="Фото бизнеса ${idx + 1}">
+        <div class="business-photo-meta"><small>Фото ${idx + 1}</small></div>
+      </div>
+    `)
+    .join("");
+}
+
+async function handleBusinessRegisterPhotosChange(e) {
+  const tier = readSelectedBusinessTier();
+  const limit = getBusinessPhotoLimit(tier);
+  try {
+    state.businessRegisterPhotos = await filesToDataUrls(e.target.files, limit);
+  } catch {
+    state.businessRegisterPhotos = [];
+  }
+  renderBusinessRegisterPhotoPreview();
+}
+
 function bindBusinessRegisterPhotoPreview() {
   const area = document.getElementById("businessPhotoArea");
   const input = document.getElementById("businessPhoto");
   if (!area || !input) return;
 
   // Keep consistent with existing file-upload UX: clicking the area opens the file dialog.
-  area.addEventListener("click", () => input.click());
+  area.onclick = () => input.click();
 }
 
 async function placeRegPin(lat, lon) {
@@ -2400,7 +3402,7 @@ async function placeRegPin(lat, lon) {
   }
 
   if (state.businessRegPin) state.businessRegPin.remove();
-  state.businessRegPin = L.marker([lat, lon], { icon: createBusinessStarIcon() }).addTo(state.businessRegMap);
+  state.businessRegPin = L.marker([lat, lon], { icon: createBusinessMarkerIcon({ subscriptionTier: readSelectedBusinessTier() }) }).addTo(state.businessRegMap);
   state.businessRegPin.bindPopup("Адрес бизнеса");
 }
 
@@ -2409,12 +3411,12 @@ async function geocodeAndPlaceRegPin(addressQuery) {
   const infoEl = document.getElementById("businessAddressInfo");
   try {
     if (!q) {
-      if (infoEl) showStatus(infoEl, "Р’РІРµРґРёС‚е адрес для поиска.", "error");
+      if (infoEl) showStatus(infoEl, "Введите адрес для поиска.", "error");
       return false;
     }
     const match = await geocodeAddress(q);
     if (!match || !isValidCoords([match.lat, match.lon])) {
-      if (infoEl) showStatus(infoEl, "РџРѕ СЌС‚РѕРјСѓ Р°РґСЂРµСЃСѓ РЅРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё РєРѕРѕСЂРґРёРЅР°С‚С‹.", "error");
+      if (infoEl) showStatus(infoEl, "По этому адресу не удалось найти координаты.", "error");
       return false;
     }
 
@@ -2431,7 +3433,7 @@ async function geocodeAndPlaceRegPin(addressQuery) {
     await placeRegPin(lat, lon);
     return true;
   } catch {
-    if (infoEl) showStatus(infoEl, "РќРµ СѓРґР°Р»РѕСЃСЊ РІС‹РїРѕР»РЅРёС‚СЊ РіРµРѕРєРѕРґРёСЂРѕРІР°РЅРёРµ. РџСЂРѕРІРµСЂСЊС‚Рµ РёРЅС‚РµСЂРЅРµС‚.", "error");
+    if (infoEl) showStatus(infoEl, "Не удалось выполнить геокодирование. Проверьте интернет.", "error");
     return false;
   }
 }
@@ -2453,13 +3455,13 @@ async function useMyLocationForRegBusiness() {
     if (lonEl) lonEl.value = String(lon);
 
     if (statusEl) {
-      statusEl.textContent = matchAddr ? `Адрес: ${matchAddr}` : "GPS РїРѕР»СѓС‡ен.";
+      statusEl.textContent = matchAddr ? `Адрес: ${matchAddr}` : "GPS получен.";
       statusEl.className = "status status-neutral";
     }
     await placeRegPin(lat, lon);
   } catch {
     if (statusEl) {
-      statusEl.textContent = "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚ь GPS.";
+      statusEl.textContent = "Не удалось получить GPS.";
       statusEl.className = "status status-neutral";
     }
   }
@@ -2494,9 +3496,13 @@ function initBusinessEditShortCounter() {
 }
 
 function initBusinessRegisterPage() {
-  // Event binding is already in bindGlobalEvents; init only sets defaults and maps.
   initBusinessRegisterShortCounter();
   bindBusinessRegisterPhotoPreview();
+  const selectedTier = getSelectedBusinessPlan();
+  const selectedInput = document.querySelector(`input[name="businessTier"][value="${selectedTier}"]`);
+  if (selectedInput) selectedInput.checked = true;
+  syncBusinessTierSelectionUi();
+  renderBusinessRegisterPhotoPreview();
 
   if (state.businessRegMap) {
     state.businessRegMap.invalidateSize();
@@ -2511,10 +3517,13 @@ async function handleBusinessRegisterSubmit(e) {
   const category = document.getElementById("businessCategory")?.value;
   const shortDescription = document.getElementById("businessShortDescription")?.value?.trim();
   const phone = document.getElementById("businessPhone")?.value?.trim();
+  const email = document.getElementById("businessEmail")?.value?.trim();
   const website = document.getElementById("businessWebsite")?.value?.trim();
   const addressText = document.getElementById("businessAddress")?.value?.trim();
   const lat = Number(document.getElementById("businessLat")?.value);
   const lon = Number(document.getElementById("businessLon")?.value);
+  const subscriptionTier = readSelectedBusinessTier();
+  const photoLimit = getBusinessPhotoLimit(subscriptionTier);
 
   const disabilities = readBusinessTagsFromForm({
     wheelchairId: "tagWheelchair",
@@ -2524,20 +3533,20 @@ async function handleBusinessRegisterSubmit(e) {
     cognitiveId: "tagCognitive",
   });
 
-  if (!name || !category || !shortDescription || !phone || !addressText) {
-    showStatus(statusEl, "Р—Р°РїРѕР»РЅРёС‚Рµ РІСЃРµ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹е поля.", "error");
+  if (!name || !category || !shortDescription || !phone || !email || !addressText) {
+    showStatus(statusEl, "Заполните все обязательные поля.", "error");
     return;
   }
   if (String(shortDescription).length > 200) {
-    showStatus(statusEl, "РћРїРёСЃР°РЅРёРµ РЅРµ РґРѕР»Р¶РЅРѕ РїСЂРµРІС‹С€Р°С‚ь 200 символов.", "error");
+    showStatus(statusEl, "Описание не должно превышать 200 символов.", "error");
     return;
   }
   if (!isValidCoords([lat, lon])) {
-    showStatus(statusEl, "РЎРЅР°С‡Р°Р»Р° РЅР°Р№РґРёС‚Рµ Р°РґСЂРµСЃ РЅР° РєР°СЂС‚Рµ (РєРѕРѕСЂРґРёРЅР°С‚С‹).", "error");
+    showStatus(statusEl, "Сначала найдите адрес на карте (координаты).", "error");
     return;
   }
   if (!disabilities.length) {
-    showStatus(statusEl, "РћС‚РјРµС‚СЊС‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ С‚РёРї РґРѕСЃС‚СѓРїРЅРѕСЃС‚и для ОВЗ.", "error");
+    showStatus(statusEl, "Отметьте хотя бы один тип доступности для ОВЗ.", "error");
     return;
   }
 
@@ -2548,20 +3557,25 @@ async function handleBusinessRegisterSubmit(e) {
     category,
     shortDescription,
     phone,
+    email,
     website: website || "",
     addressText,
     location: [lat, lon],
     disabilities,
-    photoDataUrl: state.businessRegisterPhotoDataUrl || null,
+    photos: state.businessRegisterPhotos.slice(0, photoLimit),
     views: 0,
-    verificationStatus: "На проверке",
+    analytics: buildBusinessAnalytics(id),
+    subscriptionTier,
+    verificationStatus: "under",
+    verificationDocumentName: "",
     createdAt: Date.now(),
   };
 
   upsertBusiness(business);
   setBusinessSessionId(id);
-  showStatus(statusEl, "Р‘РёР·РЅРµСЃ СЃРѕС…СЂР°РЅС‘РЅ. Р”Р°РЅРЅС‹Рµ РѕС‚РїСЂР°РІР»РµРЅС‹ на проверку.", "success");
-  // Refresh businesses on nav page (if user navigates back)
+  setSelectedBusinessPlan(subscriptionTier);
+  state.businessRegisterPhotos = [];
+  showStatus(statusEl, "Профиль бизнеса сохранён. Тариф активирован локально.", "success");
   state.businessFilterOvzOnly = false;
 
   setTimeout(() => (location.hash = "#business-dashboard"), 700);
@@ -2572,7 +3586,7 @@ function hydrateBusinessEditFromSession() {
   const biz = bizId ? getBusinessById(bizId) : null;
   const statusEl = document.getElementById("businessEditStatus");
   if (!biz) {
-    if (statusEl) showStatus(statusEl, "РџСЂРѕС„РёР»СЊ Р±РёР·РЅРµСЃР° РЅРµ РЅР°Р№РґРµРЅ. Р—Р°СЂРµРіРёСЃС‚СЂРёСЂСѓР№С‚есь.", "error");
+    if (statusEl) showStatus(statusEl, "Профиль бизнеса не найден. Зарегистрируйтесь.", "error");
     location.hash = "#business-register";
     return null;
   }
@@ -2581,6 +3595,7 @@ function hydrateBusinessEditFromSession() {
   document.getElementById("businessEditCategory").value = biz.category || "other";
   document.getElementById("businessEditShortDescription").value = biz.shortDescription || "";
   document.getElementById("businessEditPhone").value = biz.phone || "";
+  document.getElementById("businessEditEmail").value = biz.email || "";
   document.getElementById("businessEditAddress").value = biz.addressText || "";
   document.getElementById("businessEditLat").value = String(biz.location?.[0] ?? "");
   document.getElementById("businessEditLon").value = String(biz.location?.[1] ?? "");
@@ -2599,11 +3614,97 @@ function hydrateBusinessEditFromSession() {
     if (el) el.checked = disabilities.includes(k);
   }
 
-  const viewsEl = document.getElementById("businessViewsText");
-  if (viewsEl) viewsEl.textContent = `РџСЂРѕСЃРјРѕС‚СЂС‹: ${Number(biz.views || 0)}`;
+  const titleEl = document.getElementById("businessDashboardName");
+  if (titleEl) titleEl.textContent = biz.name || "Ваш бизнес";
+  const tierBadgeEl = document.getElementById("businessDashboardTierBadge");
+  if (tierBadgeEl) {
+    tierBadgeEl.textContent = `${getBusinessTierMeta(biz.subscriptionTier).label} · ${getBusinessTierMeta(biz.subscriptionTier).price}`;
+    tierBadgeEl.className = `business-tier-pill ${biz.subscriptionTier}`;
+  }
+  const planTextEl = document.getElementById("businessDashboardPlanText");
+  if (planTextEl) planTextEl.textContent = getBusinessTierMeta(biz.subscriptionTier).description;
+  applyBusinessVerificationBadge(document.getElementById("businessVerificationBadge"), biz);
+  const analytics = biz.analytics || buildBusinessAnalytics(biz.id);
+  const viewsWeekEl = document.getElementById("businessAnalyticsViewsWeek");
+  const routeEl = document.getElementById("businessAnalyticsRouteRequests");
+  const clicksEl = document.getElementById("businessAnalyticsClicks");
+  if (viewsWeekEl) viewsWeekEl.textContent = String(Number(analytics.viewsWeek || 0));
+  if (routeEl) routeEl.textContent = String(Number(analytics.routeRequests || 0));
+  if (clicksEl) clicksEl.textContent = String(Number(analytics.clicks || 0));
+  const verificationFileEl = document.getElementById("businessVerificationFileName");
+  if (verificationFileEl) verificationFileEl.textContent = biz.verificationDocumentName || "";
+  renderBusinessUpgradeActions(biz);
+  renderBusinessGallery(biz);
+  renderBusinessListingPreview(biz);
 
   initBusinessEditShortCounter();
   return biz;
+}
+
+function renderBusinessGallery(biz) {
+  const listEl = document.getElementById("businessGalleryList");
+  const limitEl = document.getElementById("businessGalleryLimitText");
+  const limit = getBusinessPhotoLimit(biz.subscriptionTier);
+  if (limitEl) limitEl.textContent = `Доступно ${biz.photos?.length || 0} / ${limit} фото`;
+  if (!listEl) return;
+  const photos = Array.isArray(biz.photos) ? biz.photos : [];
+  listEl.innerHTML = photos.length
+    ? photos.map((src, idx) => `
+        <div class="business-photo-item">
+          <img src="${esc(src)}" alt="Фото бизнеса ${idx + 1}">
+          <div class="business-photo-meta">
+            <small>Фото ${idx + 1}</small>
+            <button type="button" class="secondary-button" data-business-photo-remove="${idx}">Удалить</button>
+          </div>
+        </div>
+      `).join("")
+    : `<div class="status status-neutral">Добавьте фото, чтобы карточка бизнеса выглядела заметнее на карте.</div>`;
+}
+
+function renderBusinessListingPreview(biz) {
+  const el = document.getElementById("businessListingPreview");
+  if (!el) return;
+  const verification = getBusinessVerificationUi(biz);
+  const tierMeta = getBusinessTierMeta(biz.subscriptionTier);
+  const photo = biz.photos?.[0] ? `<img src="${biz.photos[0]}" alt="Фото бизнеса" class="business-preview-mini-photo">` : "";
+  const tags = (biz.disabilities || [])
+    .map((item) => `<span class="business-preview-tag">${esc(businessTagsLabel(item))}</span>`)
+    .join("");
+  const accessibilityBadge = biz.subscriptionTier === "pro" || biz.subscriptionTier === "premium"
+    ? `<span class="verification-badge verified">✅ Accessibility Badge</span>`
+    : "";
+  el.innerHTML = `
+    <div class="business-preview-mini">
+      ${photo}
+      <div class="business-preview-mini-head">
+        <div>
+          <div style="font-weight:1000; font-size:1.1rem;">${esc(biz.name || "Ваш бизнес")}</div>
+          <div style="margin-top:4px; color: var(--brown-soft); font-weight:800;">${esc(categoryLabel(biz.category))}</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <span class="business-tier-pill ${esc(biz.subscriptionTier)}">${esc(tierMeta.label)}</span>
+        <span class="verification-badge ${esc(verification.className)}">${esc(verification.text)}</span>
+        ${accessibilityBadge}
+      </div>
+      <div style="color: var(--brown); line-height: 1.5;">${esc(biz.shortDescription || "")}</div>
+      <div class="business-preview-tags">${tags}</div>
+    </div>
+  `;
+}
+
+function renderBusinessUpgradeActions(biz) {
+  const wrap = document.getElementById("businessUpgradeWrap");
+  if (!wrap) return;
+  if (biz.subscriptionTier === "premium") {
+    wrap.innerHTML = `<div class="status status-success" style="margin-top:0;">Премиум активен: ваш бизнес выделен на карте.</div>`;
+    return;
+  }
+  if (biz.subscriptionTier === "starter") {
+    wrap.innerHTML = `<button type="button" class="primary-button" data-business-upgrade="pro">Перейти на Про</button><button type="button" class="secondary-button" data-business-upgrade="premium">Выбрать Премиум</button>`;
+    return;
+  }
+  wrap.innerHTML = `<button type="button" class="primary-button" data-business-upgrade="premium">Апгрейд до Премиум</button>`;
 }
 
 async function placeDashPin(lat, lon) {
@@ -2619,8 +3720,10 @@ async function placeDashPin(lat, lon) {
   }
 
   if (state.businessDashPin) state.businessDashPin.remove();
-  state.businessDashPin = L.marker([lat, lon], { icon: createBusinessStarIcon() }).addTo(state.businessDashMap);
-  state.businessDashPin.bindPopup("Р’Р°С€ бизнес");
+  const bizId = getBusinessSessionId();
+  const biz = bizId ? getBusinessById(bizId) : null;
+  state.businessDashPin = L.marker([lat, lon], { icon: createBusinessMarkerIcon(biz || { subscriptionTier: "starter" }) }).addTo(state.businessDashMap);
+  state.businessDashPin.bindPopup("Ваш бизнес");
 }
 
 async function geocodeAndPlaceDashPin(addressQuery) {
@@ -2630,7 +3733,7 @@ async function geocodeAndPlaceDashPin(addressQuery) {
     const q = String(addressQuery || "").trim();
     const match = await geocodeAddress(q);
     if (!match || !isValidCoords([match.lat, match.lon])) {
-      showStatus(infoEl, "РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё РєРѕРѕСЂРґРёРЅР°С‚С‹ по адресу.", "error");
+      showStatus(infoEl, "Не удалось найти координаты по адресу.", "error");
       return false;
     }
     const lat = Number(match.lat);
@@ -2642,7 +3745,7 @@ async function geocodeAndPlaceDashPin(addressQuery) {
     await placeDashPin(lat, lon);
     return true;
   } catch {
-    showStatus(infoEl, "РћС€РёР±РєР° РіРµРѕРєРѕРґРёСЂРѕРІР°РЅРёСЏ. РџСЂРѕРІРµСЂСЊС‚Рµ РёРЅС‚РµСЂРЅРµС‚.", "error");
+    showStatus(infoEl, "Ошибка геокодирования. Проверьте интернет.", "error");
     return false;
   }
 }
@@ -2657,10 +3760,10 @@ async function useMyLocationForDashBusiness() {
     document.getElementById("businessEditLat").value = String(lat);
     document.getElementById("businessEditLon").value = String(lon);
     document.getElementById("businessEditAddress").value = addr || document.getElementById("businessEditAddress").value || "Адрес по GPS";
-    showStatus(infoEl, addr ? `Адрес: ${addr}` : "GPS РїРѕР»СѓС‡ен.", "success");
+    showStatus(infoEl, addr ? `Адрес: ${addr}` : "GPS получен.", "success");
     await placeDashPin(lat, lon);
   } catch {
-    showStatus(infoEl, "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚ь GPS.", "error");
+    showStatus(infoEl, "Не удалось получить GPS.", "error");
   }
 }
 
@@ -2671,7 +3774,7 @@ async function handleBusinessEditSubmit(e) {
   const existing = bizId ? getBusinessById(bizId) : null;
 
   if (!existing) {
-    showStatus(statusEl, "Р‘РёР·РЅРµСЃ РЅРµ РЅР°Р№РґРµРЅ. Р—Р°СЂРµРіРёСЃС‚СЂРёСЂСѓР№С‚есь заново.", "error");
+    showStatus(statusEl, "Бизнес не найден. Зарегистрируйтесь заново.", "error");
     location.hash = "#business-register";
     return;
   }
@@ -2680,6 +3783,7 @@ async function handleBusinessEditSubmit(e) {
   const category = document.getElementById("businessEditCategory")?.value;
   const shortDescription = document.getElementById("businessEditShortDescription")?.value?.trim();
   const phone = document.getElementById("businessEditPhone")?.value?.trim();
+  const email = document.getElementById("businessEditEmail")?.value?.trim();
   const website = document.getElementById("businessEditWebsite")?.value?.trim();
   const addressText = document.getElementById("businessEditAddress")?.value?.trim();
   const lat = Number(document.getElementById("businessEditLat")?.value);
@@ -2693,20 +3797,20 @@ async function handleBusinessEditSubmit(e) {
     cognitiveId: "tagEditCognitive",
   });
 
-  if (!name || !category || !shortDescription || !phone || !addressText) {
-    showStatus(statusEl, "Р—Р°РїРѕР»РЅРёС‚Рµ РІСЃРµ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹е поля.", "error");
+  if (!name || !category || !shortDescription || !phone || !email || !addressText) {
+    showStatus(statusEl, "Заполните все обязательные поля.", "error");
     return;
   }
   if (String(shortDescription).length > 200) {
-    showStatus(statusEl, "РћРїРёСЃР°РЅРёРµ РЅРµ РґРѕР»Р¶РЅРѕ РїСЂРµРІС‹С€Р°С‚ь 200 символов.", "error");
+    showStatus(statusEl, "Описание не должно превышать 200 символов.", "error");
     return;
   }
   if (!isValidCoords([lat, lon])) {
-    showStatus(statusEl, "РЎРЅР°С‡Р°Р»Р° РЅР°Р№РґРёС‚Рµ Р°РґСЂРµСЃ РЅР° РєР°СЂС‚Рµ (РєРѕРѕСЂРґРёРЅР°С‚С‹).", "error");
+    showStatus(statusEl, "Сначала найдите адрес на карте (координаты).", "error");
     return;
   }
   if (!disabilities.length) {
-    showStatus(statusEl, "РћС‚РјРµС‚СЊС‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРёРЅ С‚РёРї РґРѕСЃС‚СѓРїРЅРѕСЃС‚и для ОВЗ.", "error");
+    showStatus(statusEl, "Отметьте хотя бы один тип доступности для ОВЗ.", "error");
     return;
   }
 
@@ -2716,24 +3820,89 @@ async function handleBusinessEditSubmit(e) {
     category,
     shortDescription,
     phone,
+    email,
     website: website || "",
     addressText,
     location: [lat, lon],
     disabilities,
-    // Keep existing photo
   };
 
   upsertBusiness(updated);
-  const viewsEl = document.getElementById("businessViewsText");
-  if (viewsEl) viewsEl.textContent = `РџСЂРѕСЃРјРѕС‚СЂС‹: ${Number(updated.views || 0)}`;
-  showStatus(statusEl, "РР·РјРµРЅРµРЅРёСЏ СЃРѕС…СЂР°РЅРµРЅС‹.", "success");
-  // refresh nav map markers if open
+  hydrateBusinessEditFromSession();
+  showStatus(statusEl, "Изменения сохранены.", "success");
   if (state.navMap) renderBusinessPins(state.navMap);
+}
+
+async function handleBusinessGalleryAddPhotos(e) {
+  const statusEl = document.getElementById("businessGalleryStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing) return;
+  const remaining = Math.max(getBusinessPhotoLimit(existing.subscriptionTier) - (existing.photos?.length || 0), 0);
+  if (!remaining) {
+    showStatus(statusEl, "Лимит фото по вашему тарифу уже достигнут.", "error");
+    return;
+  }
+  try {
+    const incoming = await filesToDataUrls(e.target.files, remaining);
+    existing.photos = [...(existing.photos || []), ...incoming].slice(0, getBusinessPhotoLimit(existing.subscriptionTier));
+    upsertBusiness(existing);
+    hydrateBusinessEditFromSession();
+    e.target.value = "";
+    showStatus(statusEl, "Фото добавлены в галерею.", "success");
+  } catch {
+    showStatus(statusEl, "Не удалось обработать фото.", "error");
+  }
+}
+
+function handleBusinessRemovePhoto(indexValue) {
+  const statusEl = document.getElementById("businessGalleryStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing) return;
+  const idx = Number(indexValue);
+  if (!Number.isFinite(idx)) return;
+  existing.photos = (existing.photos || []).filter((_, photoIdx) => photoIdx !== idx);
+  upsertBusiness(existing);
+  hydrateBusinessEditFromSession();
+  showStatus(statusEl, "Фото удалено.", "success");
+}
+
+function handleBusinessUpgrade(nextTier) {
+  const statusEl = document.getElementById("businessEditStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing || !BUSINESS_TIER_META[nextTier]) return;
+  existing.subscriptionTier = nextTier;
+  upsertBusiness(existing);
+  hydrateBusinessEditFromSession();
+  if (isValidCoords(existing.location || [])) placeDashPin(existing.location[0], existing.location[1]);
+  if (state.navMap) renderBusinessPins(state.navMap);
+  showStatus(statusEl, `Тариф обновлён: ${getBusinessTierMeta(nextTier).label}.`, "success");
+}
+
+function handleBusinessVerificationDocumentChange(e) {
+  const file = e.target.files?.[0];
+  const statusEl = document.getElementById("businessEditStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing || !file) return;
+  existing.verificationStatus = "under";
+  existing.verificationDocumentName = file.name || "";
+  existing.verificationReason = "Документ загружен локально и ожидает проверки.";
+  upsertBusiness(existing);
+  hydrateBusinessEditFromSession();
+  showStatus(statusEl, "Документ добавлен. Бейдж переведён в статус 'На проверке'.", "success");
 }
 
 function initBusinessDashboardPage() {
   const biz = hydrateBusinessEditFromSession();
   if (!biz) return;
+
+  const verificationArea = document.getElementById("businessVerificationArea");
+  if (verificationArea) {
+    verificationArea.onclick = () => document.getElementById("businessVerificationDocument")?.click();
+  }
 
   const lat = Number(document.getElementById("businessEditLat")?.value);
   const lon = Number(document.getElementById("businessEditLon")?.value);
@@ -2744,7 +3913,7 @@ function populateStartFromCurrentLocation() {
   const $ = (id) => document.getElementById(id);
   if (!state.currentLocation) {
     const s = $("navigationStatus");
-    if (s) showStatus(s, "GPS пока недоступен.", "error");
+    if (s) showStatus(s, "GPS пока не доступен.", "error");
     return;
   }
   if ($("startLat")) $("startLat").value = String(state.currentLocation[0]);
@@ -2753,7 +3922,7 @@ function populateStartFromCurrentLocation() {
   const info = $("startAddressInfo");
   if (info) info.textContent = state.currentAddress || "Текущая позиция (GPS)";
   const s = $("navigationStatus");
-  if (s) showStatus(s, "Адрес старта обновлен по GPS.", "success");
+  if (s) showStatus(s, "Адрес старта обновлён по GPS.", "success");
 }
 
 function appendGpsPoint(point) {
@@ -2761,22 +3930,15 @@ function appendGpsPoint(point) {
   if (state.gpsPoints.length > 6) state.gpsPoints = state.gpsPoints.slice(-6);
 }
 
-/* в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+/* ═══════════════════════════════════════
    UTILITIES
-   в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ */
+   ═══════════════════════════════════════ */
 async function fetchJson(path, options = {}) {
-  const { baseUrl = BASE_URL, headers = {}, withAuth = true, ...rest } = options;
-  const token = loadAuthToken();
-  const mergedHeaders = { ...headers };
-  if (withAuth && token) {
-    mergedHeaders.Authorization = `Bearer ${token}`;
-  }
-
   let r;
   try {
-    r = await fetch(`${baseUrl}${path}`, { ...rest, headers: mergedHeaders });
+    r = await fetch(`${BASE_URL}${path}`, options);
   } catch (error) {
-    throw new Error("Не удалось подключиться к backend. Проверьте, что API запущен и CORS разрешен.");
+    throw new Error("Не удалось подключиться к backend. Проверьте, что API запущен и CORS разрешён.");
   }
   const ct = r.headers.get("content-type") || "";
   const payload = ct.includes("application/json") ? await r.json() : await r.text();
