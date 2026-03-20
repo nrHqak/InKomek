@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../features/auth/auth_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/map/map_screen.dart';
@@ -9,6 +10,7 @@ import '../features/profile/profile_screen.dart';
 
 class AppRouter {
   static const String onboarding = '/onboarding';
+  static const String auth = '/auth';
   static const String home = '/home';
   static const String map = '/map';
   static const String report = '/report';
@@ -19,6 +21,8 @@ class AppRouter {
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
+      case auth:
+        return _buildRoute(const AuthScreen(), settings);
       case onboarding:
         return _buildRoute(const OnboardingScreen(), settings);
       case home:

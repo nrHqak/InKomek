@@ -1,10 +1,66 @@
 /* ═══════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════ */
-const BASE_URL = "http://127.0.0.1:61750";
+// Demo deployment support (Render / separate backend + ML services):
+// Pass URL params when opening the demo:
+//   ?mlBaseUrl=https://<ml>.onrender.com&backendBaseUrl=https://<backend>.onrender.com
+// Values are cached in localStorage for convenience.
+function getConfiguredBaseUrl(queryKey, storageKey) {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get(queryKey);
+    if (fromQuery && fromQuery.trim()) {
+      localStorage.setItem(storageKey, fromQuery.trim());
+      return fromQuery.trim();
+    }
+    const fromStorage = localStorage.getItem(storageKey);
+    if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+  } catch {
+    // ignore (private mode / blocked storage)
+  }
+  return "";
+}
+
+const ML_BASE_URL = getConfiguredBaseUrl("mlBaseUrl", "inkomek-ml-base-url");
+const BACKEND_BASE_URL = getConfiguredBaseUrl("backendBaseUrl", "inkomek-backend-base-url");
+
+function resolveApiBaseUrl(path) {
+  const clean = String(path || "").split("?")[0];
+
+  // Backend (auth + persistence)
+  if (
+    clean.startsWith("/login") ||
+    clean.startsWith("/register") ||
+    clean.startsWith("/me") ||
+    clean.startsWith("/photos") ||
+    clean.startsWith("/alerts") ||
+    clean.startsWith("/places") ||
+    clean.startsWith("/reports") ||
+    clean.startsWith("/route")
+  ) {
+    return BACKEND_BASE_URL;
+  }
+
+  // ML API
+  if (
+    clean.startsWith("/navigate") ||
+    clean.startsWith("/gps/check") ||
+    clean.startsWith("/alert") ||
+    clean.startsWith("/classify") ||
+    clean.startsWith("/api/verify-document") ||
+    clean.startsWith("/openapi.json")
+  ) {
+    return ML_BASE_URL;
+  }
+
+  // Default to ML API for safety (demo UI expects ML endpoints mostly).
+  return ML_BASE_URL;
+}
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const LOCAL_USER_ID = "local_user";
+const AUTH_TOKEN_KEY = "inkomek-auth-token";
 const GPS_INTERVAL_MS = 30_000;
+let supportsGpsCheckEndpoint = null;
 const DEFAULT_CENTER = [43.238949, 76.889709];
 const DEFAULT_DESTINATION = [43.246998, 76.923778];
 const ACTIVE_NAV_HISTORY_KEY = "inkomek-auto-reports";
@@ -437,9 +493,9 @@ function closeMenu() {
 }
 
 /* ═══════════════════════════════════════
-   AUTH (local-only, no backend)
+   AUTH (backend)
    ═══════════════════════════════════════ */
-function handleSignIn(e) {
+async function handleSignIn(e) {
   e.preventDefault();
   const email = document.getElementById("signinEmail").value.trim();
   const password = document.getElementById("signinPassword").value;
@@ -450,34 +506,31 @@ function handleSignIn(e) {
     return;
   }
 
-  const stored = JSON.parse(localStorage.getItem("inkomek-users") || "{}");
-  const user = stored[email];
+  try {
+    const auth = await fetchJson("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (auth?.access_token) persistAuthToken(auth.access_token);
 
-  if (!user || user.password !== password) {
-    showStatus(statusEl, "Неверный email или пароль.", "error");
-    return;
+    const profile = await fetchJson("/me");
+    state.user = {
+      ...profile,
+      disability: profile.type_of_disability || "",
+      disability_type: profile.type_of_disability || "",
+      emergencyContact: state.user?.emergencyContact || "",
+    };
+    persistUser();
+    syncAuthUI();
+    showStatus(statusEl, "Вы вошли!", "success");
+    setTimeout(() => (location.hash = "#dashboard"), 600);
+  } catch (err) {
+    showStatus(statusEl, extractError(err, "Не удалось выполнить вход."), "error");
   }
-
-  const existingUser = loadUser();
-  state.user = {
-    name: user.name,
-    email,
-    phone: user.phone || "",
-    disability: user.disability || user.disability_type || "",
-    disability_type: user.disability_type || user.disability || "",
-    emergencyContact: user.emergencyContact || "",
-  };
-  // Preserve document verification state if it exists for this user.
-  if (existingUser && existingUser.email === email) {
-    state.user = { ...state.user, ...existingUser };
-  }
-  persistUser();
-  syncAuthUI();
-  showStatus(statusEl, "Вы вошли!", "success");
-  setTimeout(() => (location.hash = "#dashboard"), 600);
 }
 
-function handleSignUp(e) {
+async function handleSignUp(e) {
   e.preventDefault();
   const name = document.getElementById("signupName").value.trim();
   const email = document.getElementById("signupEmail").value.trim();
@@ -497,20 +550,39 @@ function handleSignUp(e) {
     return;
   }
 
-  const stored = JSON.parse(localStorage.getItem("inkomek-users") || "{}");
-  if (stored[email]) {
-    showStatus(statusEl, "Этот email уже зарегистрирован.", "error");
+  if (!["wheelchair", "blind", "elderly"].includes(disability)) {
+    showStatus(statusEl, "Для backend регистрации выберите: wheelchair, blind или elderly.", "error");
     return;
   }
 
-  stored[email] = { name, password, phone, disability, disability_type: disability };
-  localStorage.setItem("inkomek-users", JSON.stringify(stored));
+  try {
+    const auth = await fetchJson("/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        type_of_disability: disability,
+      }),
+    });
+    if (auth?.access_token) persistAuthToken(auth.access_token);
 
-  state.user = { name, email, phone, disability, disability_type: disability, emergencyContact: "" };
-  persistUser();
-  syncAuthUI();
-  showStatus(statusEl, "Аккаунт создан!", "success");
-  setTimeout(() => (location.hash = "#dashboard"), 600);
+    const profile = await fetchJson("/me");
+    state.user = {
+      ...profile,
+      phone: phone || "",
+      disability: profile.type_of_disability || "",
+      disability_type: profile.type_of_disability || "",
+      emergencyContact: "",
+    };
+    persistUser();
+    syncAuthUI();
+    showStatus(statusEl, "Аккаунт создан!", "success");
+    setTimeout(() => (location.hash = "#dashboard"), 600);
+  } catch (err) {
+    showStatus(statusEl, extractError(err, "Не удалось зарегистрировать аккаунт."), "error");
+  }
 }
 
 function handleForgotPassword(e) {
@@ -528,6 +600,7 @@ function handleForgotPassword(e) {
 
 function handleLogout() {
   state.user = null;
+  clearAuthToken();
   localStorage.removeItem("inkomek-user");
   syncAuthUI();
   location.hash = "#home";
@@ -584,6 +657,9 @@ function syncAuthUI() {
 
 function persistUser() { localStorage.setItem("inkomek-user", JSON.stringify(state.user)); }
 function loadUser() { try { return JSON.parse(localStorage.getItem("inkomek-user")); } catch { return null; } }
+function persistAuthToken(token) { localStorage.setItem(AUTH_TOKEN_KEY, token); }
+function loadAuthToken() { return localStorage.getItem(AUTH_TOKEN_KEY) || ""; }
+function clearAuthToken() { localStorage.removeItem(AUTH_TOKEN_KEY); }
 
 /* ═══════════════════════════════════════
    VOLUNTEER (local-only)
@@ -1783,7 +1859,8 @@ async function verifyUserDisabilityDocument(file) {
   formData.append("image", file);
 
   try {
-    const res = await fetch(`${BASE_URL}${VERIFY_DOCUMENT_PATH}`, {
+    const verificationBase = resolveApiBaseUrl(VERIFY_DOCUMENT_PATH);
+    const res = await fetch(`${verificationBase}${VERIFY_DOCUMENT_PATH}`, {
       method: "POST",
       body: formData,
     });
@@ -1839,7 +1916,8 @@ async function verifyUserDisabilityDocument(file) {
 
     let msg = err instanceof Error ? err.message : "Ошибка проверки документа.";
     if (msg && msg.toLowerCase().includes("failed to fetch")) {
-      msg = `Не удалось связаться с сервером. Проверьте доступность ${BASE_URL}${VERIFY_DOCUMENT_PATH} и CORS.`;
+      const verificationBase = resolveApiBaseUrl(VERIFY_DOCUMENT_PATH);
+      msg = `Не удалось связаться с сервером. Проверьте доступность ${verificationBase}${VERIFY_DOCUMENT_PATH} и CORS.`;
     }
     const ui = deriveVerificationUi(state.user);
     if (profileBadgeEl) applyVerificationBadgeToEl(profileBadgeEl, state.user);
@@ -2425,50 +2503,64 @@ function addAutoReportToHistory(report) {
 
 async function postNavigateWithFallback(payload) {
   try {
-    return await fetchJson("/api/navigate", {
+    return await fetchJson("/navigate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
   } catch {
-    return fetchJson("/navigate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const start = payload?.start_coords || [];
+    const end = payload?.end_coords || [];
+    const type = payload?.user_type || "wheelchair";
+    const route = await fetchJson(
+      `/route?from=${encodeURIComponent(`${start[0]},${start[1]}`)}&to=${encodeURIComponent(`${end[0]},${end[1]}`)}&type=${encodeURIComponent(type)}`
+    );
+    const route_coords = (route?.path || []).map((p) => [Number(p.lat), Number(p.lng)]);
+    return {
+      user_type: type,
+      route_coords,
+      summary: {
+        total_length_m: route_coords.length > 1 ? route_coords.length - 1 : 0,
+        total_accessibility_cost: (route?.segments || []).reduce((acc, s) => acc + Number(s.accessibility_weight || 0), 0),
+        node_count: route_coords.length,
+        edge_count: (route?.segments || []).length,
+      },
+    };
   }
 }
 
 async function postGpsCheckWithFallback(payload) {
+  if (supportsGpsCheckEndpoint === null) {
+    try {
+      const spec = await fetchJson("/openapi.json");
+      supportsGpsCheckEndpoint = Boolean(spec?.paths?.["/gps/check"]);
+    } catch {
+      supportsGpsCheckEndpoint = false;
+    }
+  }
+
+  if (!supportsGpsCheckEndpoint) {
+    return { is_anomaly: false, score: 0 };
+  }
+
   try {
-    return await fetchJson("/api/gps/check", {
+    return await fetchJson("/gps/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
   } catch {
-    return fetchJson("/gps/check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    supportsGpsCheckEndpoint = false;
+    return { is_anomaly: false, score: 0 };
   }
 }
 
 async function postAlertWithFallback(payload) {
-  try {
-    return await fetchJson("/api/alert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    return fetchJson("/alert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  }
+  return fetchJson("/alert", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 async function refreshActiveNavigationLocation({ centerMap = false } = {}) {
@@ -2867,8 +2959,29 @@ async function handleReportSubmit(e) {
   try {
     const formData = new FormData();
     formData.append("image", file);
+    // Provide coordinates so ML service can optionally persist the classification to backend.
+    const loc = state.currentLocation || DEFAULT_CENTER;
+    if (loc && isValidCoords(loc)) {
+      formData.append("lat", String(loc[0]));
+      formData.append("lng", String(loc[1]));
+    }
 
-    const response = await fetchJson("/classify", { method: "POST", body: formData });
+    let response;
+    try {
+      response = await fetchJson("/classify", { method: "POST", body: formData });
+    } catch {
+      const loc = state.currentLocation || DEFAULT_CENTER;
+      const photosForm = new FormData();
+      photosForm.append("file", file);
+      photosForm.append("lat", String(loc[0]));
+      photosForm.append("lng", String(loc[1]));
+      const legacy = await fetchJson("/photos", { method: "POST", body: photosForm });
+      response = {
+        category: legacy?.result || "unknown",
+        confidence: 1,
+        description: legacy?.result || "Classified via /photos backend endpoint",
+      };
+    }
     const location = state.currentLocation || DEFAULT_CENTER;
 
     addProblemPin({ location, category: response.category || "unknown", confidence: Number(response.confidence || 0), notes: document.getElementById("reportNotes").value.trim() });
@@ -2989,10 +3102,9 @@ async function runGpsCheckCycle() {
   }
 
   try {
-    const response = await fetchJson("/gps/check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: LOCAL_USER_ID, points: state.gpsPoints }),
+    const response = await postGpsCheckWithFallback({
+      user_id: LOCAL_USER_ID,
+      points: state.gpsPoints,
     });
 
     const anomalyEl = document.getElementById("anomalyBanner");
@@ -3934,9 +4046,13 @@ function appendGpsPoint(point) {
    UTILITIES
    ═══════════════════════════════════════ */
 async function fetchJson(path, options = {}) {
+  const token = loadAuthToken();
+  const headers = new Headers(options.headers || {});
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
   let r;
   try {
-    r = await fetch(`${BASE_URL}${path}`, options);
+    const base = resolveApiBaseUrl(path);
+    r = await fetch(`${base}${path}`, { ...options, headers });
   } catch (error) {
     throw new Error("Не удалось подключиться к backend. Проверьте, что API запущен и CORS разрешён.");
   }

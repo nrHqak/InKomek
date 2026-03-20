@@ -52,6 +52,26 @@ class AppState extends ChangeNotifier {
     _authToken = storageService.getAuthToken();
     apiClient.setAuthToken(_authToken);
 
+    if (_authToken.isNotEmpty) {
+      try {
+        final profile = await apiClient.me();
+        final fetchedName = (profile['name'] as String?) ?? '';
+        final fetchedType = (profile['type_of_disability'] as String?) ?? '';
+        if (fetchedName.isNotEmpty) {
+          _userName = fetchedName;
+          await storageService.setUserName(fetchedName);
+        }
+        if (fetchedType.isNotEmpty) {
+          _disabilityType = fetchedType;
+          await storageService.setDisabilityType(fetchedType);
+        }
+      } catch (_) {
+        _authToken = '';
+        apiClient.setAuthToken(null);
+        await storageService.clearAuthToken();
+      }
+    }
+
     _initialized = true;
     notifyListeners();
   }
@@ -75,8 +95,8 @@ class AppState extends ChangeNotifier {
     _authToken = token;
     apiClient.setAuthToken(token);
     await storageService.setAuthToken(token);
-    await setDisabilityType(typeOfDisability);
     await setUserName(name);
+    await setDisabilityType(typeOfDisability);
     notifyListeners();
   }
 
@@ -107,7 +127,7 @@ class AppState extends ChangeNotifier {
         await setDisabilityType(fetchedType);
       }
     } catch (_) {
-      // Keep token even if profile request fails; protected endpoints may still work.
+      // Keep token even if profile request fails.
     }
 
     notifyListeners();

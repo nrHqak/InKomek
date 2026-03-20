@@ -21,9 +21,9 @@ class InKomekApp extends StatelessWidget {
             title: 'InKomek',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(highContrast: state.highContrast),
-            initialRoute: state.isOnboardingComplete
-                ? AppRouter.home
-                : AppRouter.onboarding,
+            initialRoute: state.isAuthenticated
+                ? (state.isOnboardingComplete ? AppRouter.home : AppRouter.onboarding)
+                : AppRouter.auth,
             onGenerateRoute: AppRouter.generateRoute,
           ),
         );

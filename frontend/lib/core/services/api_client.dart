@@ -6,12 +6,14 @@ import '../constants/api_endpoints.dart';
 
 class ApiClient {
   final http.Client _client;
-  final String _baseUrl;
+  final String _mlBaseUrl;
+  final String _authBaseUrl;
   String? _authToken;
 
-  ApiClient({http.Client? client, String? baseUrl})
+  ApiClient({http.Client? client, String? mlBaseUrl, String? authBaseUrl})
       : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ?? ApiEndpoints.baseUrl;
+        _mlBaseUrl = mlBaseUrl ?? ApiEndpoints.mlBaseUrl,
+        _authBaseUrl = authBaseUrl ?? ApiEndpoints.authBaseUrl;
 
   void setAuthToken(String? token) {
     _authToken = token;
@@ -34,7 +36,7 @@ class ApiClient {
     required String password,
     required String typeOfDisability,
   }) async {
-    final response = await _post('/register', {
+    final response = await _postAuth('/register', {
       'name': name,
       'email': email,
       'password': password,
@@ -47,7 +49,7 @@ class ApiClient {
     required String email,
     required String password,
   }) async {
-    final response = await _post('/login', {
+    final response = await _postAuth('/login', {
       'email': email,
       'password': password,
     });
@@ -55,7 +57,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> me() async {
-    final uri = Uri.parse('$_baseUrl/me');
+    final uri = Uri.parse('$_authBaseUrl/me');
     final response = await _client.get(
       uri,
       headers: _headers(extra: const {'Accept': 'application/json'}),
@@ -104,7 +106,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> classifyImage(File imageFile) async {
-    final uri = Uri.parse('$_baseUrl${ApiEndpoints.classify}');
+    final uri = Uri.parse('$_mlBaseUrl${ApiEndpoints.classify}');
     final request = http.MultipartRequest('POST', uri);
     if (_authToken != null && _authToken!.isNotEmpty) {
       request.headers['Authorization'] = 'Bearer $_authToken';
@@ -130,7 +132,7 @@ class ApiClient {
 
   Future<bool> healthCheck() async {
     try {
-      final uri = Uri.parse('$_baseUrl${ApiEndpoints.health}');
+      final uri = Uri.parse('$_mlBaseUrl${ApiEndpoints.health}');
       final response = await _client.get(uri).timeout(
         const Duration(seconds: 5),
       );
@@ -144,14 +146,31 @@ class ApiClient {
     String endpoint,
     Map<String, dynamic> body,
   ) async {
-    final uri = Uri.parse('$_baseUrl$endpoint');
+    final uri = Uri.parse('$_mlBaseUrl$endpoint');
     final response = await _client.post(
       uri,
       headers: _headers(),
       body: jsonEncode(body),
     );
 
-    if (response.statusCode == 200) {
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw ApiException(response.statusCode, response.body);
+  }
+
+  Future<Map<String, dynamic>> _postAuth(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    final uri = Uri.parse('$_authBaseUrl$endpoint');
+    final response = await _client.post(
+      uri,
+      headers: _headers(),
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
     throw ApiException(response.statusCode, response.body);

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routes.alerts import router as alerts_router
 from routes.auth import router as auth_router
+from routes.gps_compat import router as gps_compat_router
 from routes.photos import router as photos_router
 from routes.places import router as places_router
 from routes.reports import router as reports_router
@@ -30,7 +31,10 @@ app.add_middleware(
         "http://localhost:5500",
         "http://127.0.0.1:5500",
     ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=(
+        r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+        r"|https?://.*\.onrender\.com(:\d+)?"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,6 +55,7 @@ app.include_router(reports_router, tags=["reports"])
 app.include_router(places_router, tags=["places"])
 app.include_router(route_router, tags=["route"])
 app.include_router(alerts_router, tags=["alerts"])
+app.include_router(gps_compat_router, tags=["gps"])
 app.include_router(photos_router, tags=["photos"])
 
 

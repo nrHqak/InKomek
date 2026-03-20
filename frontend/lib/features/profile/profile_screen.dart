@@ -63,6 +63,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildSettingsSection(state, isHc),
             const SizedBox(height: 28),
             _buildSaveButton(state, isHc),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: () => _logout(state),
+                icon: const Icon(Icons.logout),
+                label: const Text('Выйти'),
+              ),
+            ),
             if (_saved) ...[
               const SizedBox(height: 16),
               Center(
@@ -330,6 +339,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) setState(() => _saved = false);
     });
+  }
+
+  Future<void> _logout(AppState state) async {
+    await state.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
   }
 
   Color _getTypeColor(String type) {
