@@ -209,24 +209,27 @@ def accessibility_cost(df: pd.DataFrame, user_type: UserType) -> np.ndarray:
     penalty = np.ones_like(length)
 
     if user_type == "wheelchair":
-        penalty *= 1.0 + np.clip(0.8 - wheelchair, 0.0, 1.0) * 2.5
-        penalty *= 1.0 + np.clip(4.0 - width, 0.0, 4.0) * 0.2
-        penalty *= 1.0 + np.clip(incline - 3.0, 0.0, 20.0) * 0.18
-        penalty *= 1.0 + (1.0 - sidewalk) * 1.3
-        penalty *= 1.0 + (1.0 - surface) * 0.9
-        penalty *= 1.0 + (1.0 - crossing) * 0.8
+        penalty *= np.where(surface < 0.5, 4.0, 1.0)
+        penalty *= np.where(wheelchair < 0.5, 5.0, 1.0)
+        penalty *= np.where(incline > 3.0, 6.0, 1.0)
+        penalty *= np.where(sidewalk < 0.5, 3.0, 1.0)
+        penalty *= 1.0 + np.clip(1.8 - width, 0.0, 1.8) * 0.55
+        penalty *= 1.0 + (1.0 - crossing) * 1.1
     elif user_type == "blind":
-        penalty *= 1.0 + (1.0 - tactile) * 1.9
-        penalty *= 1.0 + (1.0 - crossing) * 1.4
-        penalty *= 1.0 + (1.0 - lit) * 0.7
+        penalty *= np.where(tactile == 0.0, 4.0, 1.0)
+        penalty *= np.where(crossing < 0.7, 5.0, 1.0)
+        penalty *= np.where(lit == 0.0, 2.0, 1.0)
+        penalty *= np.where(incline > 5.0, 3.0, 1.0)
         penalty *= 1.0 + (1.0 - sidewalk) * 0.6
         penalty *= 1.0 + (1.0 - highway) * 0.5
     elif user_type == "elderly":
-        penalty *= 1.0 + np.clip(incline - 2.0, 0.0, 20.0) * 0.15
-        penalty *= 1.0 + (1.0 - surface) * 1.1
-        penalty *= 1.0 + (1.0 - sidewalk) * 0.9
-        penalty *= 1.0 + (1.0 - lit) * 0.45
-        penalty *= 1.0 + np.clip(2.0 - width, 0.0, 2.0) * 0.35
+        penalty *= np.where(incline > 2.0, 2.5, 1.0)
+        penalty *= np.where(lit == 0.0, 3.0, 1.0)
+        penalty *= np.where(surface < 0.7, 2.0, 1.0)
+        penalty *= np.where(crossing < 0.7, 2.5, 1.0)
+        penalty *= np.where(width < 1.5, 2.0, 1.0)
+        penalty *= 1.0 + (1.0 - sidewalk) * 0.45
+        penalty *= 1.0 + (1.0 - highway) * 0.35
     else:
         raise ValueError(f"Unsupported user_type: {user_type}")
 

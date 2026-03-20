@@ -10,6 +10,7 @@ from app.api.alert import router as alert_router
 from app.api.classification import router as classification_router
 from app.api.gps import router as gps_router
 from app.api.navigation import router as navigation_router
+from app.api.verification import router as verification_router
 from app.core.config import get_settings
 from app.services.classification_service import AccessibilityClassificationService
 from app.services.gps_service import GPSAnomalyService
@@ -34,6 +35,7 @@ app.include_router(navigation_router)
 app.include_router(gps_router)
 app.include_router(classification_router)
 app.include_router(alert_router)
+app.include_router(verification_router)
 
 _navigation_service: NavigationService | None = None
 _gps_service: GPSAnomalyService | None = None

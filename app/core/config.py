@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     )
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    backend_api_url: str | None = Field(default=None, alias="BACKEND_API_URL")
 
 
 @lru_cache(maxsize=1)
