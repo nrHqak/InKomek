@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════ */
-const BASE_URL = "http://127.0.0.1:61749";
+const BASE_URL = "http://127.0.0.1:61750";
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const LOCAL_USER_ID = "local_user";
 const GPS_INTERVAL_MS = 30_000;
@@ -11,6 +11,8 @@ const ACTIVE_NAV_HISTORY_KEY = "inkomek-auto-reports";
 
 const PAGES = [
   "home",
+  "dashboard",
+  "verification",
   "navigate",
   "report",
   "sos",
@@ -25,8 +27,26 @@ const PAGES = [
   "volunteer-home",
   "business-register",
   "business-dashboard",
-  "pricing",
 ];
+
+const PROTECTED_USER_PAGES = new Set([
+  "dashboard",
+  "verification",
+  "navigate",
+  "report",
+  "sos",
+  "profile",
+  "request-help",
+  "user-requests",
+]);
+
+const VERIFICATION_REQUIRED_PAGES = new Set([
+  "navigate",
+  "report",
+  "sos",
+  "request-help",
+  "user-requests",
+]);
 
 /* ═══════════════════════════════════════
    STATE
@@ -77,8 +97,8 @@ const state = {
   businessCardBusinessId: null,
   businessFilterOvzOnly: false,
 
-  businessRegisterPhotoDataUrl: null,
-  businessEditPhotoDataUrl: null,
+  businessRegisterPhotos: [],
+  businessPendingVerificationFileName: "",
 
   // Active autonomous navigation
   activeRouteCoords: [],
@@ -121,9 +141,26 @@ function handleHashChange() {
   const raw = (location.hash || "#home").slice(1);
   let page = raw === "map" ? "navigate" : (PAGES.includes(raw) ? raw : "home");
 
+  if (PROTECTED_USER_PAGES.has(page) && !state.user) {
+    location.hash = "#signin";
+    return;
+  }
+
   // Authenticated users should not see the guest landing page.
   if (page === "home" && state.user) {
-    location.hash = "#navigate";
+    location.hash = "#dashboard";
+    return;
+  }
+
+  // Verification gate: user can access core features only after verification.
+  if (state.user && !isUserVerified(state.user) && VERIFICATION_REQUIRED_PAGES.has(page)) {
+    location.hash = "#verification";
+    return;
+  }
+
+  // Verified users don't need to stay on verification page.
+  if (state.user && isUserVerified(state.user) && page === "verification") {
+    location.hash = "#dashboard";
     return;
   }
 
@@ -147,6 +184,7 @@ function handleHashChange() {
   if (page !== "navigate") stopActiveNavigationSession();
   if (page === "navigate") initNavMap();
   if (page === "report") initReportMap();
+  if (page === "verification") hydrateVerificationPage();
   if (page === "profile") hydrateProfile();
   if (page === "request-help") hydrateRequestHelp();
   if (page === "user-requests") initUserRequestsPage();
@@ -158,6 +196,40 @@ function handleHashChange() {
   window.scrollTo({ top: 0 });
 }
 
+function isUserVerified(user) {
+  return deriveVerificationUi(user).statusKey === "verified";
+}
+
+function hydrateVerificationPage() {
+  if (!state.user) {
+    location.hash = "#signin";
+    return;
+  }
+
+  const badgeEl = document.getElementById("verificationGateBadge");
+  const reasonEl = document.getElementById("verificationGateReason");
+  const ctaEl = document.getElementById("verificationGoProfileButton");
+  if (badgeEl) applyVerificationBadgeToEl(badgeEl, state.user);
+
+  const ui = deriveVerificationUi(state.user);
+  const reason = state.user?.verificationReason || "";
+  if (reasonEl) {
+    if (ui.statusKey === "verified") {
+      reasonEl.textContent = "Ваш профиль подтверждён. Доступ ко всем функциям открыт.";
+    } else if (reason) {
+      reasonEl.textContent = `Причина: ${reason}`;
+    } else {
+      reasonEl.textContent = "Загрузите документ в профиле, чтобы разблокировать маршруты, SOS, репорты и запрос помощи.";
+    }
+  }
+
+  if (ctaEl) {
+    ctaEl.onclick = () => {
+      location.hash = "#profile";
+    };
+  }
+}
+
 /* ═══════════════════════════════════════
    GLOBAL EVENT BINDING
    ═══════════════════════════════════════ */
@@ -165,6 +237,10 @@ function bindGlobalEvents() {
   const $ = (id) => document.getElementById(id);
 
   $("hamburger").addEventListener("click", toggleMenu);
+  $("navBackdrop")?.addEventListener("click", closeMenu);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenu();
+  });
 
   // Home role entry
   $("roleUserButton")?.addEventListener("click", (e) => {
@@ -290,26 +366,9 @@ function bindGlobalEvents() {
   });
   $("businessUseMyLocationButton")?.addEventListener("click", () => useMyLocationForRegBusiness());
   $("businessRegisterForm")?.addEventListener("submit", handleBusinessRegisterSubmit);
-  $("businessPhoto")?.addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    const nameEl = document.getElementById("businessPhotoName");
-    if (nameEl) nameEl.textContent = file?.name || "";
-    if (!file) {
-      state.businessRegisterPhotoDataUrl = null;
-      return;
-    }
-
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(fr.result);
-        fr.onerror = () => reject(new Error("file read error"));
-        fr.readAsDataURL(file);
-      });
-      state.businessRegisterPhotoDataUrl = dataUrl;
-    } catch {
-      state.businessRegisterPhotoDataUrl = null;
-    }
+  $("businessPhoto")?.addEventListener("change", handleBusinessRegisterPhotosChange);
+  document.querySelectorAll('input[name="businessTier"]').forEach((input) => {
+    input.addEventListener("change", syncBusinessTierSelectionUi);
   });
 
   // Businesses: dashboard edit
@@ -320,6 +379,9 @@ function bindGlobalEvents() {
   });
   $("businessEditUseMyLocationButton")?.addEventListener("click", () => useMyLocationForDashBusiness());
   $("businessEditForm")?.addEventListener("submit", handleBusinessEditSubmit);
+  $("businessAddPhotosButton")?.addEventListener("click", () => document.getElementById("businessAddPhotos")?.click());
+  $("businessAddPhotos")?.addEventListener("change", handleBusinessGalleryAddPhotos);
+  $("businessVerificationDocument")?.addEventListener("change", handleBusinessVerificationDocumentChange);
 
   // Pricing buttons (local-only)
   document.addEventListener("click", (e) => {
@@ -334,6 +396,18 @@ function bindGlobalEvents() {
     const routeBtn = e.target.closest?.("[data-business-route-to-inkomek]");
     if (routeBtn) {
       prefillNavigateToInkomek();
+      return;
+    }
+
+    const upgradeBtn = e.target.closest?.("[data-business-upgrade]");
+    if (upgradeBtn) {
+      handleBusinessUpgrade(upgradeBtn.getAttribute("data-business-upgrade"));
+      return;
+    }
+
+    const removePhotoBtn = e.target.closest?.("[data-business-photo-remove]");
+    if (removePhotoBtn) {
+      handleBusinessRemovePhoto(removePhotoBtn.getAttribute("data-business-photo-remove"));
     }
   });
 
@@ -346,13 +420,20 @@ function bindGlobalEvents() {
 function toggleMenu() {
   const btn = document.getElementById("hamburger");
   const links = document.getElementById("navLinks");
-  btn.classList.toggle("open");
-  links.classList.toggle("open");
+  const backdrop = document.getElementById("navBackdrop");
+  const nextOpen = !links.classList.contains("open");
+  btn.classList.toggle("open", nextOpen);
+  links.classList.toggle("open", nextOpen);
+  backdrop?.classList.toggle("open", nextOpen);
+  btn?.setAttribute("aria-expanded", nextOpen ? "true" : "false");
 }
 
 function closeMenu() {
-  document.getElementById("hamburger")?.classList.remove("open");
+  const btn = document.getElementById("hamburger");
   document.getElementById("navLinks")?.classList.remove("open");
+  document.getElementById("navBackdrop")?.classList.remove("open");
+  btn?.classList.remove("open");
+  btn?.setAttribute("aria-expanded", "false");
 }
 
 /* ═══════════════════════════════════════
@@ -393,7 +474,7 @@ function handleSignIn(e) {
   persistUser();
   syncAuthUI();
   showStatus(statusEl, "Вы вошли!", "success");
-  setTimeout(() => (location.hash = "#navigate"), 600);
+  setTimeout(() => (location.hash = "#dashboard"), 600);
 }
 
 function handleSignUp(e) {
@@ -429,7 +510,7 @@ function handleSignUp(e) {
   persistUser();
   syncAuthUI();
   showStatus(statusEl, "Аккаунт создан!", "success");
-  setTimeout(() => (location.hash = "#navigate"), 600);
+  setTimeout(() => (location.hash = "#dashboard"), 600);
 }
 
 function handleForgotPassword(e) {
@@ -462,12 +543,21 @@ function handleDeleteAccount() {
   handleLogout();
 }
 
+function updateNavbarVisibility() {
+  const navbar = document.getElementById("navbar");
+  const hasSession = Boolean(state.user || state.volunteer);
+  if (navbar) navbar.classList.toggle("hidden", !hasSession);
+  document.body.classList.toggle("guest-no-navbar", !hasSession);
+}
+
 function syncAuthUI() {
   const authBlock = document.getElementById("navAuth");
   const userBlock = document.getElementById("navUser");
   const avatarEl = document.getElementById("navAvatarInitial");
   const navUserNameEl = document.getElementById("navUserName");
   const navBadgeEl = document.getElementById("navVerificationBadge");
+  const navHomeLink = document.getElementById("navHomeLink");
+  const navBrandLink = document.getElementById("navBrandLink");
 
   if (state.user) {
     authBlock?.classList.add("hidden");
@@ -475,10 +565,21 @@ function syncAuthUI() {
     if (avatarEl) avatarEl.textContent = (state.user.name || "U").charAt(0).toUpperCase();
     if (navUserNameEl) navUserNameEl.textContent = state.user.name || "Пользователь";
     if (navBadgeEl) applyVerificationBadgeToEl(navBadgeEl, state.user);
+    if (navHomeLink) {
+      navHomeLink.setAttribute("href", "#dashboard");
+      navHomeLink.dataset.page = "dashboard";
+    }
+    if (navBrandLink) navBrandLink.setAttribute("href", "#dashboard");
   } else {
     authBlock?.classList.remove("hidden");
     userBlock?.classList.add("hidden");
+    if (navHomeLink) {
+      navHomeLink.setAttribute("href", "#home");
+      navHomeLink.dataset.page = "home";
+    }
+    if (navBrandLink) navBrandLink.setAttribute("href", "#home");
   }
+  updateNavbarVisibility();
 }
 
 function persistUser() { localStorage.setItem("inkomek-user", JSON.stringify(state.user)); }
@@ -496,6 +597,109 @@ const LOCAL_BROWSER_ID_KEY = "inkomek-local-browser-id";
 
 const BUSINESSES_KEY = "inkomek-businesses";
 const BUSINESS_SESSION_KEY = "inkomek-business-session";
+const BUSINESS_PLAN_SELECTION_KEY = "inkomek-selected-business-plan";
+
+const BUSINESS_TIER_META = {
+  starter: {
+    label: "Стартер",
+    price: "$29/month",
+    photoLimit: 1,
+    description: "Листинг на карте, базовый профиль и неограниченные просмотры.",
+  },
+  pro: {
+    label: "Про",
+    price: "$79/month",
+    photoLimit: 5,
+    description: "Accessibility Badge, аналитика, приоритет в поиске и кнопка маршрута.",
+  },
+  premium: {
+    label: "Премиум",
+    price: "$199/month",
+    photoLimit: 5,
+    description: "Featured-размещение, API доступ, ESG отчёт и выделенный менеджер.",
+  },
+};
+
+function getBusinessTierMeta(tier) {
+  return BUSINESS_TIER_META[tier] || BUSINESS_TIER_META.starter;
+}
+
+function getBusinessPhotoLimit(tier) {
+  return Number(getBusinessTierMeta(tier).photoLimit || 1);
+}
+
+function getSelectedBusinessPlan() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(BUSINESS_PLAN_SELECTION_KEY) || "\"starter\"");
+    return BUSINESS_TIER_META[raw] ? raw : "starter";
+  } catch {
+    return "starter";
+  }
+}
+
+function setSelectedBusinessPlan(plan) {
+  const next = BUSINESS_TIER_META[plan] ? plan : "starter";
+  localStorage.setItem(BUSINESS_PLAN_SELECTION_KEY, JSON.stringify(next));
+  return next;
+}
+
+function hashString(value) {
+  let hash = 0;
+  const text = String(value || "");
+  for (let i = 0; i < text.length; i += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function seededMetric(seed, min, max) {
+  const span = Math.max(max - min, 1);
+  return min + (hashString(seed) % (span + 1));
+}
+
+function buildBusinessAnalytics(id) {
+  return {
+    viewsWeek: seededMetric(`${id}:views`, 110, 920),
+    routeRequests: seededMetric(`${id}:routes`, 9, 140),
+    clicks: seededMetric(`${id}:clicks`, 20, 240),
+  };
+}
+
+function normalizeBusiness(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const tier = BUSINESS_TIER_META[raw.subscriptionTier] ? raw.subscriptionTier : "starter";
+  const photos = Array.isArray(raw.photos)
+    ? raw.photos.filter((item) => typeof item === "string" && item)
+    : raw.photoDataUrl
+      ? [raw.photoDataUrl]
+      : [];
+  return {
+    ...raw,
+    subscriptionTier: tier,
+    email: raw.email || "",
+    website: raw.website || "",
+    photos: photos.slice(0, getBusinessPhotoLimit(tier)),
+    analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : buildBusinessAnalytics(raw.id || Date.now()),
+    verificationStatus: raw.verificationStatus === "verified" || raw.verificationStatus === "not-verified" ? raw.verificationStatus : "under",
+    verificationDocumentName: raw.verificationDocumentName || "",
+    verificationReason: raw.verificationReason || "",
+  };
+}
+
+function getBusinessVerificationUi(business) {
+  const status = business?.verificationStatus || "under";
+  if (status === "verified") return { text: "✅ Верифицирован", className: "verified" };
+  if (status === "not-verified") return { text: "❌ Не верифицировано", className: "not-verified" };
+  return { text: "🟡 На проверке", className: "under" };
+}
+
+function applyBusinessVerificationBadge(el, business) {
+  if (!el) return;
+  const ui = getBusinessVerificationUi(business);
+  el.classList.remove("verified", "under", "not-verified");
+  el.classList.add(ui.className);
+  el.textContent = ui.text;
+}
 
 function getLocalBrowserId() {
   let id = localStorage.getItem(LOCAL_BROWSER_ID_KEY);
@@ -567,7 +771,7 @@ function persistHelpRequests(list) {
 function loadBusinesses() {
   try {
     const raw = JSON.parse(localStorage.getItem(BUSINESSES_KEY) || "[]");
-    return Array.isArray(raw) ? raw : [];
+    return Array.isArray(raw) ? raw.map(normalizeBusiness).filter(Boolean) : [];
   } catch {
     return [];
   }
@@ -593,11 +797,12 @@ function getBusinessById(businessId) {
 
 function upsertBusiness(business) {
   const list = loadBusinesses();
-  const idx = list.findIndex((b) => b.id === business.id);
-  if (idx >= 0) list[idx] = business;
-  else list.push(business);
+  const normalized = normalizeBusiness(business);
+  const idx = list.findIndex((b) => b.id === normalized.id);
+  if (idx >= 0) list[idx] = normalized;
+  else list.push(normalized);
   persistBusinesses(list);
-  return business;
+  return normalized;
 }
 
 function categoryLabel(categoryKey) {
@@ -1039,6 +1244,7 @@ function syncVolunteerAuthUI() {
   const navVolunteer = document.querySelector(".nav-volunteer-link");
   if (state.volunteer && navVolunteer) navVolunteer.classList.remove("hidden");
   if (!state.volunteer && navVolunteer) navVolunteer.classList.add("hidden");
+  updateNavbarVisibility();
 
   // Volunteer home may show profile hint; keep simple for now
 }
@@ -2911,20 +3117,31 @@ function clearBusinessMarkers() {
   state.businessMarkers = [];
 }
 
-function createBusinessStarIcon() {
-  const svg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="#F5A800" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-  </svg>`;
-  const html = `<div style="width:30px;height:30px;border-radius:999px;background:#3B1F0A;border:3px solid #F5A800;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 22px rgba(0,0,0,0.18);">
-    ${svg}
-  </div>`;
+function createBusinessMarkerIcon(business) {
+  const tier = business?.subscriptionTier || "starter";
+  const size = tier === "premium" ? 44 : tier === "pro" ? 38 : 32;
+  const border = tier === "premium" ? "#fff3bf" : "#F5A800";
+  const bg = tier === "premium" ? "#7c4a03" : "#F5A800";
+  const color = tier === "starter" ? "#3B1F0A" : "#fff";
+  const badge = tier === "premium"
+    ? `<span style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:999px;background:#fff7cf;border:2px solid #D48A00;display:flex;align-items:center;justify-content:center;font-size:12px;">★</span>`
+    : tier === "pro"
+      ? `<span style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:999px;background:#edf8f0;border:2px solid #216e39;display:flex;align-items:center;justify-content:center;font-size:12px;color:#216e39;">✓</span>`
+      : "";
+  const shadow = tier === "premium" ? "0 14px 34px rgba(245,168,0,0.38)" : "0 10px 22px rgba(0,0,0,0.18)";
+  const html = `
+    <div style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:${bg};border:3px solid ${border};display:flex;align-items:center;justify-content:center;box-shadow:${shadow};font-size:${tier === "starter" ? 18 : 17}px;color:${color};font-weight:1000;">
+      ${tier === "starter" ? "🏢" : tier === "premium" ? "🏢" : "🏢"}
+      ${badge}
+    </div>
+  `;
 
   return L.divIcon({
     html,
     className: "",
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -12],
+    iconSize: [size, size],
+    iconAnchor: [Math.round(size / 2), Math.round(size / 2)],
+    popupAnchor: [0, -14],
   });
 }
 
@@ -2934,14 +3151,16 @@ function renderBusinessPins(mapInstance) {
 
   clearBusinessMarkers();
 
-  const list = loadBusinesses();
-  const icon = createBusinessStarIcon();
+  const list = loadBusinesses().sort((a, b) => {
+    const rank = { premium: 0, pro: 1, starter: 2 };
+    return (rank[a.subscriptionTier] ?? 9) - (rank[b.subscriptionTier] ?? 9);
+  });
 
   for (const b of list) {
     if (!b?.location || !isValidCoords(b.location)) continue;
     if (!businessMatchesOvzFilter(b)) continue;
 
-    const marker = L.marker(b.location, { icon }).addTo(mapInstance);
+    const marker = L.marker(b.location, { icon: createBusinessMarkerIcon(b) }).addTo(mapInstance);
     marker.on("click", () => openBusinessCard(b.id));
     state.businessMarkers.push({ id: b.id, marker });
   }
@@ -2952,6 +3171,8 @@ function incrementBusinessViews(businessId) {
   const idx = list.findIndex((b) => b.id === businessId);
   if (idx < 0) return 0;
   list[idx].views = Number(list[idx].views || 0) + 1;
+  list[idx].analytics = list[idx].analytics || buildBusinessAnalytics(list[idx].id);
+  list[idx].analytics.clicks = Number(list[idx].analytics.clicks || 0) + 1;
   persistBusinesses(list);
   return list[idx].views;
 }
@@ -2975,6 +3196,14 @@ function prefillNavigateForBusiness(business) {
     if (statusEl) showStatus(statusEl, "Старт и финиш заполнены для маршрута.", "success");
   }
 
+  const list = loadBusinesses();
+  const idx = list.findIndex((item) => item.id === business.id);
+  if (idx >= 0) {
+    list[idx].analytics = list[idx].analytics || buildBusinessAnalytics(list[idx].id);
+    list[idx].analytics.routeRequests = Number(list[idx].analytics.routeRequests || 0) + 1;
+    persistBusinesses(list);
+  }
+
   location.hash = "#navigate";
   // Hide card after navigation action
   hideBusinessCard();
@@ -2994,7 +3223,6 @@ function prefillNavigateToInkomek() {
   location.hash = "#navigate";
 }
 
-// Backward compatible alias for event handler in pricing page
 function hideBusinessCard() {
   const panel = document.getElementById("businessCardPanel");
   if (panel) {
@@ -3017,7 +3245,15 @@ function openBusinessCard(businessId) {
 
   const tags = (biz.disabilities || []).map((t) => businessTagsLabel(t)).join(", ");
   const website = biz.website ? `<a href="${esc(biz.website)}" target="_blank" rel="noopener" class="primary-link">Сайт</a>` : "";
-  const photo = biz.photoDataUrl ? `<img src="${biz.photoDataUrl}" alt="Фото бизнеса" style="width:120px;height:90px;object-fit:cover;border-radius:14px;border:2px solid rgba(59,31,10,0.08); margin-bottom:10px;">` : "";
+  const photo = biz.photos?.[0] ? `<img src="${biz.photos[0]}" alt="Фото бизнеса" style="width:120px;height:90px;object-fit:cover;border-radius:14px;border:2px solid rgba(59,31,10,0.08); margin-bottom:10px;">` : "";
+  const verification = getBusinessVerificationUi(biz);
+  const tier = getBusinessTierMeta(biz.subscriptionTier);
+  const routeButton = biz.subscriptionTier === "starter"
+    ? ""
+    : `<button type="button" class="primary-button" data-build-route-business="${esc(biz.id)}" style="flex:1; min-width:220px;">Построить маршрут</button>`;
+  const accessibilityBadge = biz.subscriptionTier === "pro" || biz.subscriptionTier === "premium"
+    ? `<span class="verification-badge verified">✅ Accessibility Badge</span>`
+    : "";
 
   panel.innerHTML = `
     <div class="business-card">
@@ -3031,6 +3267,11 @@ function openBusinessCard(businessId) {
             <div>
               <div style="font-weight:1000; font-size:1.1rem;">${esc(biz.name)}</div>
               <div style="font-weight:800; color: var(--brown-soft);">${esc(categoryLabel(biz.category))}</div>
+              <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+                <span class="business-tier-pill ${esc(biz.subscriptionTier)}">${esc(tier.label)}</span>
+                <span class="verification-badge ${esc(verification.className)}">${esc(verification.text)}</span>
+                ${accessibilityBadge}
+              </div>
             </div>
           </div>
           <div style="margin-top:10px; font-weight:800;">Описание</div>
@@ -3042,6 +3283,7 @@ function openBusinessCard(businessId) {
         <div style="font-weight:900;">Контакты</div>
         <div style="margin-top:6px; display:grid; gap:6px;">
           <div><strong>Телефон:</strong> ${esc(biz.phone || "")}</div>
+          <div><strong>Email:</strong> ${esc(biz.email || "")}</div>
           <div>${website || ""}</div>
           <div><strong>Адрес:</strong> ${esc(biz.addressText || "")}</div>
         </div>
@@ -3053,11 +3295,11 @@ function openBusinessCard(businessId) {
       </div>
 
       <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap;">
-        <button type="button" class="primary-button" data-build-route-business="${esc(biz.id)}" style="flex:1; min-width:220px;">Построить маршрут</button>
+        ${routeButton}
         <button type="button" class="secondary-button" data-close-business-card="1" style="min-width:160px;">Закрыть</button>
       </div>
 
-      <div class="status status-neutral" style="margin-top:12px;">Просмотры: ${Number(biz.views || 0)}</div>
+      <div class="status status-neutral" style="margin-top:12px;">Просмотры: ${Number(biz.views || 0)} · Тариф: ${esc(tier.label)}</div>
     </div>
   `;
 
@@ -3079,13 +3321,72 @@ function openBusinessCard(businessId) {
 /* ═══════════════════════════════════════
    BUSINESS PAGES (local-only)
    ═══════════════════════════════════════ */
+function readSelectedBusinessTier() {
+  const selected = document.querySelector('input[name="businessTier"]:checked');
+  return selected?.value || getSelectedBusinessPlan();
+}
+
+function syncBusinessTierSelectionUi() {
+  const selectedTier = setSelectedBusinessPlan(readSelectedBusinessTier());
+  const meta = getBusinessTierMeta(selectedTier);
+  state.businessRegisterPhotos = state.businessRegisterPhotos.slice(0, meta.photoLimit);
+  const hintEl = document.getElementById("businessPhotoLimitHint");
+  const nameEl = document.getElementById("businessTierSummaryName");
+  const textEl = document.getElementById("businessTierSummaryText");
+  if (hintEl) hintEl.textContent = `Текущий тариф: ${meta.label}. Можно добавить до ${meta.photoLimit} ${meta.photoLimit === 1 ? "фото" : "фото"}.`;
+  if (nameEl) nameEl.textContent = `${meta.label} · ${meta.price}`;
+  if (textEl) textEl.textContent = meta.description;
+  renderBusinessRegisterPhotoPreview();
+}
+
+async function filesToDataUrls(fileList, maxCount) {
+  const files = Array.from(fileList || []).slice(0, maxCount);
+  const results = [];
+  for (const file of files) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(new Error("file read error"));
+      fr.readAsDataURL(file);
+    });
+    if (typeof dataUrl === "string" && dataUrl) results.push(dataUrl);
+  }
+  return results;
+}
+
+function renderBusinessRegisterPhotoPreview() {
+  const listEl = document.getElementById("businessPhotoPreviewList");
+  const nameEl = document.getElementById("businessPhotoName");
+  if (nameEl) nameEl.textContent = state.businessRegisterPhotos.length ? `Выбрано фото: ${state.businessRegisterPhotos.length}` : "";
+  if (!listEl) return;
+  listEl.innerHTML = state.businessRegisterPhotos
+    .map((src, idx) => `
+      <div class="business-photo-item">
+        <img src="${esc(src)}" alt="Фото бизнеса ${idx + 1}">
+        <div class="business-photo-meta"><small>Фото ${idx + 1}</small></div>
+      </div>
+    `)
+    .join("");
+}
+
+async function handleBusinessRegisterPhotosChange(e) {
+  const tier = readSelectedBusinessTier();
+  const limit = getBusinessPhotoLimit(tier);
+  try {
+    state.businessRegisterPhotos = await filesToDataUrls(e.target.files, limit);
+  } catch {
+    state.businessRegisterPhotos = [];
+  }
+  renderBusinessRegisterPhotoPreview();
+}
+
 function bindBusinessRegisterPhotoPreview() {
   const area = document.getElementById("businessPhotoArea");
   const input = document.getElementById("businessPhoto");
   if (!area || !input) return;
 
   // Keep consistent with existing file-upload UX: clicking the area opens the file dialog.
-  area.addEventListener("click", () => input.click());
+  area.onclick = () => input.click();
 }
 
 async function placeRegPin(lat, lon) {
@@ -3101,7 +3402,7 @@ async function placeRegPin(lat, lon) {
   }
 
   if (state.businessRegPin) state.businessRegPin.remove();
-  state.businessRegPin = L.marker([lat, lon], { icon: createBusinessStarIcon() }).addTo(state.businessRegMap);
+  state.businessRegPin = L.marker([lat, lon], { icon: createBusinessMarkerIcon({ subscriptionTier: readSelectedBusinessTier() }) }).addTo(state.businessRegMap);
   state.businessRegPin.bindPopup("Адрес бизнеса");
 }
 
@@ -3195,9 +3496,13 @@ function initBusinessEditShortCounter() {
 }
 
 function initBusinessRegisterPage() {
-  // Event binding is already in bindGlobalEvents; init only sets defaults and maps.
   initBusinessRegisterShortCounter();
   bindBusinessRegisterPhotoPreview();
+  const selectedTier = getSelectedBusinessPlan();
+  const selectedInput = document.querySelector(`input[name="businessTier"][value="${selectedTier}"]`);
+  if (selectedInput) selectedInput.checked = true;
+  syncBusinessTierSelectionUi();
+  renderBusinessRegisterPhotoPreview();
 
   if (state.businessRegMap) {
     state.businessRegMap.invalidateSize();
@@ -3212,10 +3517,13 @@ async function handleBusinessRegisterSubmit(e) {
   const category = document.getElementById("businessCategory")?.value;
   const shortDescription = document.getElementById("businessShortDescription")?.value?.trim();
   const phone = document.getElementById("businessPhone")?.value?.trim();
+  const email = document.getElementById("businessEmail")?.value?.trim();
   const website = document.getElementById("businessWebsite")?.value?.trim();
   const addressText = document.getElementById("businessAddress")?.value?.trim();
   const lat = Number(document.getElementById("businessLat")?.value);
   const lon = Number(document.getElementById("businessLon")?.value);
+  const subscriptionTier = readSelectedBusinessTier();
+  const photoLimit = getBusinessPhotoLimit(subscriptionTier);
 
   const disabilities = readBusinessTagsFromForm({
     wheelchairId: "tagWheelchair",
@@ -3225,7 +3533,7 @@ async function handleBusinessRegisterSubmit(e) {
     cognitiveId: "tagCognitive",
   });
 
-  if (!name || !category || !shortDescription || !phone || !addressText) {
+  if (!name || !category || !shortDescription || !phone || !email || !addressText) {
     showStatus(statusEl, "Заполните все обязательные поля.", "error");
     return;
   }
@@ -3249,20 +3557,25 @@ async function handleBusinessRegisterSubmit(e) {
     category,
     shortDescription,
     phone,
+    email,
     website: website || "",
     addressText,
     location: [lat, lon],
     disabilities,
-    photoDataUrl: state.businessRegisterPhotoDataUrl || null,
+    photos: state.businessRegisterPhotos.slice(0, photoLimit),
     views: 0,
-    verificationStatus: "На проверке",
+    analytics: buildBusinessAnalytics(id),
+    subscriptionTier,
+    verificationStatus: "under",
+    verificationDocumentName: "",
     createdAt: Date.now(),
   };
 
   upsertBusiness(business);
   setBusinessSessionId(id);
-  showStatus(statusEl, "Бизнес сохранён. Данные отправлены на проверку.", "success");
-  // Refresh businesses on nav page (if user navigates back)
+  setSelectedBusinessPlan(subscriptionTier);
+  state.businessRegisterPhotos = [];
+  showStatus(statusEl, "Профиль бизнеса сохранён. Тариф активирован локально.", "success");
   state.businessFilterOvzOnly = false;
 
   setTimeout(() => (location.hash = "#business-dashboard"), 700);
@@ -3282,6 +3595,7 @@ function hydrateBusinessEditFromSession() {
   document.getElementById("businessEditCategory").value = biz.category || "other";
   document.getElementById("businessEditShortDescription").value = biz.shortDescription || "";
   document.getElementById("businessEditPhone").value = biz.phone || "";
+  document.getElementById("businessEditEmail").value = biz.email || "";
   document.getElementById("businessEditAddress").value = biz.addressText || "";
   document.getElementById("businessEditLat").value = String(biz.location?.[0] ?? "");
   document.getElementById("businessEditLon").value = String(biz.location?.[1] ?? "");
@@ -3300,11 +3614,97 @@ function hydrateBusinessEditFromSession() {
     if (el) el.checked = disabilities.includes(k);
   }
 
-  const viewsEl = document.getElementById("businessViewsText");
-  if (viewsEl) viewsEl.textContent = `Просмотры: ${Number(biz.views || 0)}`;
+  const titleEl = document.getElementById("businessDashboardName");
+  if (titleEl) titleEl.textContent = biz.name || "Ваш бизнес";
+  const tierBadgeEl = document.getElementById("businessDashboardTierBadge");
+  if (tierBadgeEl) {
+    tierBadgeEl.textContent = `${getBusinessTierMeta(biz.subscriptionTier).label} · ${getBusinessTierMeta(biz.subscriptionTier).price}`;
+    tierBadgeEl.className = `business-tier-pill ${biz.subscriptionTier}`;
+  }
+  const planTextEl = document.getElementById("businessDashboardPlanText");
+  if (planTextEl) planTextEl.textContent = getBusinessTierMeta(biz.subscriptionTier).description;
+  applyBusinessVerificationBadge(document.getElementById("businessVerificationBadge"), biz);
+  const analytics = biz.analytics || buildBusinessAnalytics(biz.id);
+  const viewsWeekEl = document.getElementById("businessAnalyticsViewsWeek");
+  const routeEl = document.getElementById("businessAnalyticsRouteRequests");
+  const clicksEl = document.getElementById("businessAnalyticsClicks");
+  if (viewsWeekEl) viewsWeekEl.textContent = String(Number(analytics.viewsWeek || 0));
+  if (routeEl) routeEl.textContent = String(Number(analytics.routeRequests || 0));
+  if (clicksEl) clicksEl.textContent = String(Number(analytics.clicks || 0));
+  const verificationFileEl = document.getElementById("businessVerificationFileName");
+  if (verificationFileEl) verificationFileEl.textContent = biz.verificationDocumentName || "";
+  renderBusinessUpgradeActions(biz);
+  renderBusinessGallery(biz);
+  renderBusinessListingPreview(biz);
 
   initBusinessEditShortCounter();
   return biz;
+}
+
+function renderBusinessGallery(biz) {
+  const listEl = document.getElementById("businessGalleryList");
+  const limitEl = document.getElementById("businessGalleryLimitText");
+  const limit = getBusinessPhotoLimit(biz.subscriptionTier);
+  if (limitEl) limitEl.textContent = `Доступно ${biz.photos?.length || 0} / ${limit} фото`;
+  if (!listEl) return;
+  const photos = Array.isArray(biz.photos) ? biz.photos : [];
+  listEl.innerHTML = photos.length
+    ? photos.map((src, idx) => `
+        <div class="business-photo-item">
+          <img src="${esc(src)}" alt="Фото бизнеса ${idx + 1}">
+          <div class="business-photo-meta">
+            <small>Фото ${idx + 1}</small>
+            <button type="button" class="secondary-button" data-business-photo-remove="${idx}">Удалить</button>
+          </div>
+        </div>
+      `).join("")
+    : `<div class="status status-neutral">Добавьте фото, чтобы карточка бизнеса выглядела заметнее на карте.</div>`;
+}
+
+function renderBusinessListingPreview(biz) {
+  const el = document.getElementById("businessListingPreview");
+  if (!el) return;
+  const verification = getBusinessVerificationUi(biz);
+  const tierMeta = getBusinessTierMeta(biz.subscriptionTier);
+  const photo = biz.photos?.[0] ? `<img src="${biz.photos[0]}" alt="Фото бизнеса" class="business-preview-mini-photo">` : "";
+  const tags = (biz.disabilities || [])
+    .map((item) => `<span class="business-preview-tag">${esc(businessTagsLabel(item))}</span>`)
+    .join("");
+  const accessibilityBadge = biz.subscriptionTier === "pro" || biz.subscriptionTier === "premium"
+    ? `<span class="verification-badge verified">✅ Accessibility Badge</span>`
+    : "";
+  el.innerHTML = `
+    <div class="business-preview-mini">
+      ${photo}
+      <div class="business-preview-mini-head">
+        <div>
+          <div style="font-weight:1000; font-size:1.1rem;">${esc(biz.name || "Ваш бизнес")}</div>
+          <div style="margin-top:4px; color: var(--brown-soft); font-weight:800;">${esc(categoryLabel(biz.category))}</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <span class="business-tier-pill ${esc(biz.subscriptionTier)}">${esc(tierMeta.label)}</span>
+        <span class="verification-badge ${esc(verification.className)}">${esc(verification.text)}</span>
+        ${accessibilityBadge}
+      </div>
+      <div style="color: var(--brown); line-height: 1.5;">${esc(biz.shortDescription || "")}</div>
+      <div class="business-preview-tags">${tags}</div>
+    </div>
+  `;
+}
+
+function renderBusinessUpgradeActions(biz) {
+  const wrap = document.getElementById("businessUpgradeWrap");
+  if (!wrap) return;
+  if (biz.subscriptionTier === "premium") {
+    wrap.innerHTML = `<div class="status status-success" style="margin-top:0;">Премиум активен: ваш бизнес выделен на карте.</div>`;
+    return;
+  }
+  if (biz.subscriptionTier === "starter") {
+    wrap.innerHTML = `<button type="button" class="primary-button" data-business-upgrade="pro">Перейти на Про</button><button type="button" class="secondary-button" data-business-upgrade="premium">Выбрать Премиум</button>`;
+    return;
+  }
+  wrap.innerHTML = `<button type="button" class="primary-button" data-business-upgrade="premium">Апгрейд до Премиум</button>`;
 }
 
 async function placeDashPin(lat, lon) {
@@ -3320,7 +3720,9 @@ async function placeDashPin(lat, lon) {
   }
 
   if (state.businessDashPin) state.businessDashPin.remove();
-  state.businessDashPin = L.marker([lat, lon], { icon: createBusinessStarIcon() }).addTo(state.businessDashMap);
+  const bizId = getBusinessSessionId();
+  const biz = bizId ? getBusinessById(bizId) : null;
+  state.businessDashPin = L.marker([lat, lon], { icon: createBusinessMarkerIcon(biz || { subscriptionTier: "starter" }) }).addTo(state.businessDashMap);
   state.businessDashPin.bindPopup("Ваш бизнес");
 }
 
@@ -3381,6 +3783,7 @@ async function handleBusinessEditSubmit(e) {
   const category = document.getElementById("businessEditCategory")?.value;
   const shortDescription = document.getElementById("businessEditShortDescription")?.value?.trim();
   const phone = document.getElementById("businessEditPhone")?.value?.trim();
+  const email = document.getElementById("businessEditEmail")?.value?.trim();
   const website = document.getElementById("businessEditWebsite")?.value?.trim();
   const addressText = document.getElementById("businessEditAddress")?.value?.trim();
   const lat = Number(document.getElementById("businessEditLat")?.value);
@@ -3394,7 +3797,7 @@ async function handleBusinessEditSubmit(e) {
     cognitiveId: "tagEditCognitive",
   });
 
-  if (!name || !category || !shortDescription || !phone || !addressText) {
+  if (!name || !category || !shortDescription || !phone || !email || !addressText) {
     showStatus(statusEl, "Заполните все обязательные поля.", "error");
     return;
   }
@@ -3417,24 +3820,89 @@ async function handleBusinessEditSubmit(e) {
     category,
     shortDescription,
     phone,
+    email,
     website: website || "",
     addressText,
     location: [lat, lon],
     disabilities,
-    // Keep existing photo
   };
 
   upsertBusiness(updated);
-  const viewsEl = document.getElementById("businessViewsText");
-  if (viewsEl) viewsEl.textContent = `Просмотры: ${Number(updated.views || 0)}`;
+  hydrateBusinessEditFromSession();
   showStatus(statusEl, "Изменения сохранены.", "success");
-  // refresh nav map markers if open
   if (state.navMap) renderBusinessPins(state.navMap);
+}
+
+async function handleBusinessGalleryAddPhotos(e) {
+  const statusEl = document.getElementById("businessGalleryStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing) return;
+  const remaining = Math.max(getBusinessPhotoLimit(existing.subscriptionTier) - (existing.photos?.length || 0), 0);
+  if (!remaining) {
+    showStatus(statusEl, "Лимит фото по вашему тарифу уже достигнут.", "error");
+    return;
+  }
+  try {
+    const incoming = await filesToDataUrls(e.target.files, remaining);
+    existing.photos = [...(existing.photos || []), ...incoming].slice(0, getBusinessPhotoLimit(existing.subscriptionTier));
+    upsertBusiness(existing);
+    hydrateBusinessEditFromSession();
+    e.target.value = "";
+    showStatus(statusEl, "Фото добавлены в галерею.", "success");
+  } catch {
+    showStatus(statusEl, "Не удалось обработать фото.", "error");
+  }
+}
+
+function handleBusinessRemovePhoto(indexValue) {
+  const statusEl = document.getElementById("businessGalleryStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing) return;
+  const idx = Number(indexValue);
+  if (!Number.isFinite(idx)) return;
+  existing.photos = (existing.photos || []).filter((_, photoIdx) => photoIdx !== idx);
+  upsertBusiness(existing);
+  hydrateBusinessEditFromSession();
+  showStatus(statusEl, "Фото удалено.", "success");
+}
+
+function handleBusinessUpgrade(nextTier) {
+  const statusEl = document.getElementById("businessEditStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing || !BUSINESS_TIER_META[nextTier]) return;
+  existing.subscriptionTier = nextTier;
+  upsertBusiness(existing);
+  hydrateBusinessEditFromSession();
+  if (isValidCoords(existing.location || [])) placeDashPin(existing.location[0], existing.location[1]);
+  if (state.navMap) renderBusinessPins(state.navMap);
+  showStatus(statusEl, `Тариф обновлён: ${getBusinessTierMeta(nextTier).label}.`, "success");
+}
+
+function handleBusinessVerificationDocumentChange(e) {
+  const file = e.target.files?.[0];
+  const statusEl = document.getElementById("businessEditStatus");
+  const bizId = getBusinessSessionId();
+  const existing = bizId ? getBusinessById(bizId) : null;
+  if (!existing || !file) return;
+  existing.verificationStatus = "under";
+  existing.verificationDocumentName = file.name || "";
+  existing.verificationReason = "Документ загружен локально и ожидает проверки.";
+  upsertBusiness(existing);
+  hydrateBusinessEditFromSession();
+  showStatus(statusEl, "Документ добавлен. Бейдж переведён в статус 'На проверке'.", "success");
 }
 
 function initBusinessDashboardPage() {
   const biz = hydrateBusinessEditFromSession();
   if (!biz) return;
+
+  const verificationArea = document.getElementById("businessVerificationArea");
+  if (verificationArea) {
+    verificationArea.onclick = () => document.getElementById("businessVerificationDocument")?.click();
+  }
 
   const lat = Number(document.getElementById("businessEditLat")?.value);
   const lon = Number(document.getElementById("businessEditLon")?.value);
